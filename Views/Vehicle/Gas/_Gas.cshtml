@@ -214,7 +214,7 @@
         <table class="table table-hover @(userConfig.UseGridInMobile ? "" : "ll-responsive-table")">
             <thead class="sticky-top">
                 <tr class="d-flex">
-                    <th scope="col" class="col-2 flex-grow-1 text-truncate" data-column="daterefueled">@translator.Translate(userLanguage, "Date Refueled")</th>
+                    <th scope="col" class="col-1 flex-grow-1 text-truncate" data-column="daterefueled">@translator.Translate(userLanguage, "Date Refueled")</th>
                     @* FEATURE: Odometer Compensation - show "Dashboard / Real" header when compensation is active *@
                     <th scope="col" class="col-2 flex-grow-1 flex-shrink-1 text-truncate" data-column="odometer">@(showDualMileage ? $"{translator.Translate(userLanguage, "Odometer")} (Dash/Real, {distanceUnit})" : $"{translator.Translate(userLanguage, "Odometer")}({distanceUnit})")</th>
                     <th scope="col" class="col-1 flex-grow-1 flex-shrink-1 text-truncate" data-column="delta" style="cursor:pointer;" onclick="toggleSort('gas-tab-pane', this)">@($"Δ({distanceUnit})")</th>
@@ -239,7 +239,7 @@
                 @foreach (GasRecordViewModel gasRecord in Model.GasRecords)
                 {
                     <tr class="d-flex user-select-none" style="cursor:pointer;" onmouseup="stopEvent()" ontouchstart="detectRowLongTouch(this)" ontouchend="detectRowTouchEndPremature(this)" data-rowId="@gasRecord.Id" oncontextmenu="showTableContextMenu(this)" onmousemove="rangeMouseMove(this)" onclick="handleTableRowClick(this, showEditGasRecordModal,@gasRecord.Id)" data-tags='@string.Join(" ", gasRecord.Tags)'>
-                        <td data-label="@translator.Translate(userLanguage, "Date Refueled")" class="col-2 flex-grow-1 text-truncate" data-column="daterefueled">@gasRecord.Date</td>
+                        <td data-label="@translator.Translate(userLanguage, "Date Refueled")" class="col-1 flex-grow-1 text-truncate" data-column="daterefueled">@gasRecord.Date</td>
                         @* FEATURE: Odometer Compensation - show "dashboard / real" mileage when compensation is configured *@
                         <td data-label="@(showDualMileage ? $"{translator.Translate(userLanguage, "Odometer")} (Dash/Real, {distanceUnit})" : $"{translator.Translate(userLanguage, "Odometer")}({distanceUnit})")" class="col-2 flex-grow-1 flex-shrink-1 text-truncate" data-column="odometer" data-gas-type="mileage" data-gas-aggregate="@gasRecord.DeltaMileage" data-gas-original="@gasRecord.Mileage">@(gasRecord.Mileage == default ? "---" : (showDualMileage && gasRecord.RealMileage != gasRecord.Mileage ? $"{gasRecord.Mileage} / {gasRecord.RealMileage}" : gasRecord.Mileage.ToString()))</td>
                         <td data-label="@($"Δ({distanceUnit})")" class="col-1 flex-grow-1 flex-shrink-1 text-truncate" data-column="delta" data-gas-type="totaldistance">@(gasRecord.DeltaMileage == default ? "---" : gasRecord.DeltaMileage)</td>

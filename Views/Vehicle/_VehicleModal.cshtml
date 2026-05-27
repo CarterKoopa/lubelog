@@ -67,31 +67,23 @@
                         <input class="form-check-input" type="checkbox" role="switch" id="inputOdometerOptional" checked="@Model.OdometerOptional">
                         <label class="form-check-label" for="inputOdometerOptional">@translator.Translate(userLanguage, "Odometer Optional")</label>
                     </div>
+                    @* FEATURE: Odometer Compensation - replaces the old "Odometer Adjustments" section.
+                       Compensation factor corrects mileage after a chosen start point (non-stock tires).
+                       Static offset adds a fixed value to every reading (e.g. after odometer replacement).
+                       The "(Non-Stock Tires)" description is shown only inside the expanded section, not on the toggle. *@
                     <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" role="switch" onchange="toggleOdometerAdjustment()" id="inputHasOdometerAdjustment" checked="@Model.HasOdometerAdjustment">
-                        <label class="form-check-label" for="inputHasOdometerAdjustment">@translator.Translate(userLanguage, "Odometer Adjustments")</label>
+                        <input class="form-check-input" type="checkbox" role="switch" onchange="toggleOdometerCompensation()" id="inputHasOdometerCompensation" checked="@(!string.IsNullOrWhiteSpace(Model.OdometerCompensationFactor) || Model.OdometerDifference != "0")">
+                        <label class="form-check-label" for="inputHasOdometerCompensation">@translator.Translate(userLanguage, "Odometer Compensation")</label>
                     </div>
-                    <div class="collapse @(Model.HasOdometerAdjustment ? "show" : "")" id="odometerAdjustments">
+                    <div class="collapse @((!string.IsNullOrWhiteSpace(Model.OdometerCompensationFactor) || Model.OdometerDifference != "0") ? "show" : "")" id="odometerCompensation">
                         <div>
-                            <label for="inputOdometerMultiplier">@translator.Translate(userLanguage, "Odometer Multiplier")</label>
-                            <input type="text" id="inputOdometerMultiplier" class="form-control" placeholder="@translator.Translate(userLanguage, "Odometer Multiplier")" value="@Model.OdometerMultiplier">
-                            <label for="inputOdometerDifference">@translator.Translate(userLanguage, "Odometer Difference")</label>
-                            <input type="text" id="inputOdometerDifference" class="form-control" placeholder="@translator.Translate(userLanguage, "Odometer Difference")" value="@Model.OdometerDifference">
-                        </div>
-                    </div>
-                    @* FEATURE: Odometer Compensation - toggle and fields for correcting odometer readings from non-stock tires.
-                       When enabled, mileage entered is treated as "dashboard mileage" and real mileage is computed
-                       by multiplying miles driven after OdometerCompensationStart by OdometerCompensationFactor. *@
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" role="switch" onchange="toggleOdometerCompensation()" id="inputHasOdometerCompensation" checked="@(!string.IsNullOrWhiteSpace(Model.OdometerCompensationFactor))">
-                        <label class="form-check-label" for="inputHasOdometerCompensation">@translator.Translate(userLanguage, "Odometer Compensation (Non-Stock Tires)")</label>
-                    </div>
-                    <div class="collapse @(!string.IsNullOrWhiteSpace(Model.OdometerCompensationFactor) ? "show" : "")" id="odometerCompensation">
-                        <div>
-                            <label for="inputOdometerCompensationFactor">@translator.Translate(userLanguage, "Compensation Factor")</label>
-                            <input type="text" inputmode="decimal" onkeydown="interceptDecimalKeys(event)" onkeyup="fixDecimalInput(this, 4)" id="inputOdometerCompensationFactor" class="form-control" placeholder="@translator.Translate(userLanguage, "e.g. 1.087")" value="@Model.OdometerCompensationFactor">
-                            <label for="inputOdometerCompensationStart">@translator.Translate(userLanguage, "Start Mileage (Dashboard)")</label>
-                            <input type="number" inputmode="numeric" id="inputOdometerCompensationStart" class="form-control" placeholder="@translator.Translate(userLanguage, "Dashboard mileage when compensation begins")" value="@(Model.OdometerCompensationStart == 0 ? "" : Model.OdometerCompensationStart.ToString())">
+                            <small class="text-muted d-block mb-1">@translator.Translate(userLanguage, "For non-stock tire size corrections (affects fuel economy calculation)")</small>
+                            <label for="inputOdometerCompensationFactor">@translator.Translate(userLanguage, "Compensation Factor (optional)")</label>
+                            <input type="text" inputmode="decimal" onkeydown="interceptDecimalKeys(event)" onkeyup="fixDecimalInput(this, 4)" id="inputOdometerCompensationFactor" class="form-control" placeholder="@translator.Translate(userLanguage, "e.g. 1.087 — leave blank if not using tire compensation")" value="@Model.OdometerCompensationFactor">
+                            <label for="inputOdometerCompensationStart">@translator.Translate(userLanguage, "Start Mileage (Dashboard, optional)")</label>
+                            <input type="number" inputmode="numeric" id="inputOdometerCompensationStart" class="form-control" placeholder="@translator.Translate(userLanguage, "Dashboard mileage when compensation begins (default: 0)")" value="@(Model.OdometerCompensationStart == 0 ? "" : Model.OdometerCompensationStart.ToString())">
+                            <label for="inputOdometerDifference">@translator.Translate(userLanguage, "Static Offset (optional)")</label>
+                            <input type="text" id="inputOdometerDifference" class="form-control" placeholder="@translator.Translate(userLanguage, "Fixed value added to every reading, e.g. after odometer replacement")" value="@(Model.OdometerDifference == "0" ? "" : Model.OdometerDifference)">
                         </div>
                     </div>
                     <div class="accordion accordion-flush" id="vehicleModalAccordion">

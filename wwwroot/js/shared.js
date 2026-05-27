@@ -101,13 +101,13 @@ function saveVehicle(isEdit) {
     var vehicleIsFlexFuel = $("#inputFuelType").val() == 'FlexFuel';
     var vehicleUseHours = $("#inputUseHours").is(":checked");
     var vehicleOdometerOptional = $("#inputOdometerOptional").is(":checked");
-    var vehicleHasOdometerAdjustment = $("#inputHasOdometerAdjustment").is(':checked');
-    var vehicleOdometerMultiplier = $("#inputOdometerMultiplier").val();
-    var vehicleOdometerDifference = parseInt(globalParseFloat($("#inputOdometerDifference").val())).toString();
-    // FEATURE: Odometer Compensation - read compensation factor and start mileage from form
+    // FEATURE: Odometer Compensation - single toggle replaces the old "Odometer Adjustments" section.
+    // The static offset (inputOdometerDifference) is now inside this same section.
     var vehicleHasOdometerCompensation = $("#inputHasOdometerCompensation").is(':checked');
     var vehicleOdometerCompensationFactor = vehicleHasOdometerCompensation ? $("#inputOdometerCompensationFactor").val() : "";
     var vehicleOdometerCompensationStart = vehicleHasOdometerCompensation ? (parseInt($("#inputOdometerCompensationStart").val()) || 0) : 0;
+    // Static offset (replaces old OdometerDifference field; lives inside the compensation section)
+    var vehicleOdometerDifference = vehicleHasOdometerCompensation ? parseInt(globalParseFloat($("#inputOdometerDifference").val()) || 0).toString() : "0";
     var vehiclePurchasePrice = $("#inputPurchasePrice").val();
     var vehicleSoldPrice = $("#inputSoldPrice").val();
     var vehicleIdentifier = $("#inputIdentifier").val();
@@ -158,31 +158,24 @@ function saveVehicle(isEdit) {
         }
     }
     
-    if (vehicleHasOdometerAdjustment) {
-        //validate odometer adjustments
-        //validate multiplier
-        if (vehicleOdometerMultiplier.trim() == '' || !isValidMoney(vehicleOdometerMultiplier)) {
-            hasError = true;
-            $("#inputOdometerMultiplier").addClass("is-invalid");
-        } else {
-            $("#inputOdometerMultiplier").removeClass("is-invalid");
-        }
-        //validate difference
-        if (vehicleOdometerDifference.trim() == '' || isNaN(vehicleOdometerDifference)) {
-            hasError = true;
-            $("#inputOdometerDifference").addClass("is-invalid");
-        } else {
-            $("#inputOdometerDifference").removeClass("is-invalid");
-        }
-    }
-    // FEATURE: Odometer Compensation - validate compensation factor is a valid positive decimal when enabled
+    // FEATURE: Odometer Compensation - validate factor (only if provided — it's optional) and static offset
     if (vehicleHasOdometerCompensation) {
-        if (vehicleOdometerCompensationFactor.trim() == '' || !isValidMoney(vehicleOdometerCompensationFactor) || parseFloat(vehicleOdometerCompensationFactor) <= 0) {
+        // Factor is optional; only validate if the user actually filled it in
+        var compFactor = vehicleOdometerCompensationFactor.trim();
+        if (compFactor != '' && (!isValidMoney(compFactor) || parseFloat(compFactor) <= 0)) {
             hasError = true;
             $("#inputOdometerCompensationFactor").addClass("is-invalid");
             $("#odometerCompensation").collapse('show');
         } else {
             $("#inputOdometerCompensationFactor").removeClass("is-invalid");
+        }
+        // Static offset must be a valid integer if provided
+        if (vehicleOdometerDifference.trim() != "0" && isNaN(vehicleOdometerDifference)) {
+            hasError = true;
+            $("#inputOdometerDifference").addClass("is-invalid");
+            $("#odometerCompensation").collapse('show');
+        } else {
+            $("#inputOdometerDifference").removeClass("is-invalid");
         }
     }
     if (vehiclePurchasePrice.trim() != '' && !isValidMoney(vehiclePurchasePrice)) {
@@ -236,10 +229,11 @@ function saveVehicle(isEdit) {
         purchaseDate: vehiclePurchaseDate,
         soldDate: vehicleSoldDate,
         odometerOptional: vehicleOdometerOptional,
-        hasOdometerAdjustment: vehicleHasOdometerAdjustment,
-        odometerMultiplier: vehicleOdometerMultiplier,
+        // FEATURE: Odometer Compensation - compensation toggle now drives hasOdometerAdjustment;
+        // odometerMultiplier is always "1" since scaling is handled server-side by the compensation factor.
+        hasOdometerAdjustment: vehicleHasOdometerCompensation,
+        odometerMultiplier: "1",
         odometerDifference: vehicleOdometerDifference,
-        // FEATURE: Odometer Compensation - include compensation factor and start mileage in vehicle save payload
         odometerCompensationFactor: vehicleOdometerCompensationFactor,
         odometerCompensationStart: vehicleOdometerCompensationStart,
         purchasePrice: vehiclePurchasePrice,
@@ -269,15 +263,7 @@ function saveVehicle(isEdit) {
         }
     });
 }
-function toggleOdometerAdjustment() {
-    var isChecked = $("#inputHasOdometerAdjustment").is(':checked');
-    if (isChecked) {
-        $("#odometerAdjustments").collapse('show');
-    } else {
-        $("#odometerAdjustments").collapse('hide');
-    }
-}
-// FEATURE: Odometer Compensation - show/hide the compensation factor and start mileage fields
+// FEATURE: Odometer Compensation - show/hide the compensation section (replaces old toggleOdometerAdjustment)
 function toggleOdometerCompensation() {
     var isChecked = $("#inputHasOdometerCompensation").is(':checked');
     if (isChecked) {
