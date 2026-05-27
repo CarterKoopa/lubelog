@@ -17,10 +17,21 @@
     var useKwh = Model.UseKwh;
     var useHours = Model.UseHours;
     var recordTags = Model.GasRecords.SelectMany(x => x.Tags).Distinct();
-    // FEATURE: Flex Fuel - determine if any E85 records exist to enable per-type stats display
+    // FEATURE: Flex Fuel - determine if any E85 records exist to enable per-type stats display.
+    // hasE85Records checks FuelType (what was ADDED) to decide whether the per-type section is relevant.
+    //
+    // Per-type averages use a "pure segment" filter: both FuelType (what was ADDED at this fill)
+    // and MpgFuelType (what was BURNED since the previous fill) must be the same type.
+    // This excludes "transition" fills — e.g. adding gasoline after an E-85 tank, or vice versa —
+    // because the measured MPG reflects a mixed or changing fuel composition and should not be
+    // credited to either type's average. Missed fill-ups are separately excluded by IncludeInAverage.
+    //
+    // Consequence: the Unleaded Avg only appears once there is a gasoline-after-gasoline segment,
+    // and the E-85 Avg only appears once there is an E-85-after-E-85 segment (i.e. at least two
+    // consecutive E-85 fills). A single E-85 fill produces no E-85 average data yet.
     var hasE85Records = Model.IsFlexFuel && Model.GasRecords.Any(x => x.FuelType == "E85");
-    var gasolineRecords = hasE85Records ? Model.GasRecords.Where(x => x.FuelType != "E85").ToList() : new List<GasRecordViewModel>();
-    var e85Records = hasE85Records ? Model.GasRecords.Where(x => x.FuelType == "E85").ToList() : new List<GasRecordViewModel>();
+    var gasolineRecords = hasE85Records ? Model.GasRecords.Where(x => x.FuelType != "E85" && x.MpgFuelType != "E85").ToList() : new List<GasRecordViewModel>();
+    var e85Records = hasE85Records ? Model.GasRecords.Where(x => x.FuelType == "E85" && x.MpgFuelType == "E85").ToList() : new List<GasRecordViewModel>();
     // FEATURE: Odometer Compensation - whether to show both dashboard and real mileage in the odometer column
     var showDualMileage = Model.HasOdometerCompensation;
     string preferredFuelEconomyUnit = userConfig.PreferredGasMileageUnit;

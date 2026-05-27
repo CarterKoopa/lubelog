@@ -51,6 +51,9 @@ namespace CarCareTracker.Helper
             var computedResults = new List<GasRecordViewModel>();
             // FEATURE: Odometer Compensation - track previous real mileage so deltas use real distances
             int previousRealMileage = 0;
+            // FEATURE: Flex Fuel - track the previous fill's fuel type so MPG at fill N is credited to
+            // the fuel that was actually burned (fill N-1's type), not the fuel added at fill N.
+            string previousFuelType = "Gasoline";
             decimal unFactoredConsumption = 0.00M;
             int unFactoredMileage = 0;
             //perform computation.
@@ -97,8 +100,9 @@ namespace CarCareTracker.Helper
                         Tags = currentObject.Tags,
                         ExtraFields = currentObject.ExtraFields,
                         Files = currentObject.Files,
-                        // FEATURE: Flex Fuel - pass through the fuel type for per-type statistics and display
-                        FuelType = currentObject.FuelType
+                        // FEATURE: Flex Fuel - FuelType = what was ADDED; MpgFuelType = what was BURNED (previous fill's type)
+                        FuelType = currentObject.FuelType,
+                        MpgFuelType = previousFuelType
                     };
                     if (currentObject.MissedFuelUp)
                     {
@@ -156,8 +160,10 @@ namespace CarCareTracker.Helper
                         Tags = currentObject.Tags,
                         ExtraFields = currentObject.ExtraFields,
                         Files = currentObject.Files,
-                        // FEATURE: Flex Fuel - pass through the fuel type
-                        FuelType = currentObject.FuelType
+                        // FEATURE: Flex Fuel - first record has no prior fill, so MpgFuelType defaults to "Gasoline";
+                        // MilesPerGallon is always 0 here so it won't affect any per-type averages
+                        FuelType = currentObject.FuelType,
+                        MpgFuelType = "Gasoline"
                     });
                 }
                 if (currentObject.Mileage != default)
@@ -165,6 +171,10 @@ namespace CarCareTracker.Helper
                     // FEATURE: Odometer Compensation - update previous real mileage for next iteration's delta
                     previousRealMileage = realMileage;
                 }
+                // FEATURE: Flex Fuel - advance the previous fuel type so the next record's MpgFuelType is correct.
+                // Updated unconditionally (including MissedFuelUp) because a recorded fill — even if missed —
+                // represents real fuel added to the tank.
+                previousFuelType = currentObject.FuelType;
             }
             return computedResults;
         }
