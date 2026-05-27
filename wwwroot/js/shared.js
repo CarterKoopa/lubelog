@@ -97,11 +97,17 @@ function saveVehicle(isEdit) {
     var vehicleLicensePlate = $("#inputLicensePlate").val();
     var vehicleIsElectric = $("#inputFuelType").val() == 'Electric';
     var vehicleIsDiesel = $("#inputFuelType").val() == 'Diesel';
+    // FEATURE: Flex Fuel - read whether the vehicle is configured as a flex-fuel vehicle
+    var vehicleIsFlexFuel = $("#inputFuelType").val() == 'FlexFuel';
     var vehicleUseHours = $("#inputUseHours").is(":checked");
     var vehicleOdometerOptional = $("#inputOdometerOptional").is(":checked");
     var vehicleHasOdometerAdjustment = $("#inputHasOdometerAdjustment").is(':checked');
     var vehicleOdometerMultiplier = $("#inputOdometerMultiplier").val();
     var vehicleOdometerDifference = parseInt(globalParseFloat($("#inputOdometerDifference").val())).toString();
+    // FEATURE: Odometer Compensation - read compensation factor and start mileage from form
+    var vehicleHasOdometerCompensation = $("#inputHasOdometerCompensation").is(':checked');
+    var vehicleOdometerCompensationFactor = vehicleHasOdometerCompensation ? $("#inputOdometerCompensationFactor").val() : "";
+    var vehicleOdometerCompensationStart = vehicleHasOdometerCompensation ? (parseInt($("#inputOdometerCompensationStart").val()) || 0) : 0;
     var vehiclePurchasePrice = $("#inputPurchasePrice").val();
     var vehicleSoldPrice = $("#inputSoldPrice").val();
     var vehicleIdentifier = $("#inputIdentifier").val();
@@ -169,6 +175,16 @@ function saveVehicle(isEdit) {
             $("#inputOdometerDifference").removeClass("is-invalid");
         }
     }
+    // FEATURE: Odometer Compensation - validate compensation factor is a valid positive decimal when enabled
+    if (vehicleHasOdometerCompensation) {
+        if (vehicleOdometerCompensationFactor.trim() == '' || !isValidMoney(vehicleOdometerCompensationFactor) || parseFloat(vehicleOdometerCompensationFactor) <= 0) {
+            hasError = true;
+            $("#inputOdometerCompensationFactor").addClass("is-invalid");
+            $("#odometerCompensation").collapse('show');
+        } else {
+            $("#inputOdometerCompensationFactor").removeClass("is-invalid");
+        }
+    }
     if (vehiclePurchasePrice.trim() != '' && !isValidMoney(vehiclePurchasePrice)) {
         hasError = true;
         $("#inputPurchasePrice").addClass("is-invalid");
@@ -212,6 +228,8 @@ function saveVehicle(isEdit) {
         licensePlate: vehicleLicensePlate,
         isElectric: vehicleIsElectric,
         isDiesel: vehicleIsDiesel,
+        // FEATURE: Flex Fuel - include flex fuel flag in vehicle save payload
+        isFlexFuel: vehicleIsFlexFuel,
         tags: vehicleTags,
         useHours: vehicleUseHours,
         extraFields: extraFields.extraFields,
@@ -221,6 +239,9 @@ function saveVehicle(isEdit) {
         hasOdometerAdjustment: vehicleHasOdometerAdjustment,
         odometerMultiplier: vehicleOdometerMultiplier,
         odometerDifference: vehicleOdometerDifference,
+        // FEATURE: Odometer Compensation - include compensation factor and start mileage in vehicle save payload
+        odometerCompensationFactor: vehicleOdometerCompensationFactor,
+        odometerCompensationStart: vehicleOdometerCompensationStart,
         purchasePrice: vehiclePurchasePrice,
         soldPrice: vehicleSoldPrice,
         dashboardMetrics: vehicleDashboardMetrics,
@@ -254,6 +275,15 @@ function toggleOdometerAdjustment() {
         $("#odometerAdjustments").collapse('show');
     } else {
         $("#odometerAdjustments").collapse('hide');
+    }
+}
+// FEATURE: Odometer Compensation - show/hide the compensation factor and start mileage fields
+function toggleOdometerCompensation() {
+    var isChecked = $("#inputHasOdometerCompensation").is(':checked');
+    if (isChecked) {
+        $("#odometerCompensation").collapse('show');
+    } else {
+        $("#odometerCompensation").collapse('hide');
     }
 }
 function setUploadedFile(data) {

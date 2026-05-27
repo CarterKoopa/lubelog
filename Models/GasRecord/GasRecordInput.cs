@@ -24,20 +24,23 @@
         public List<SupplyUsageHistory> RequisitionHistory { get; set; } = new List<SupplyUsageHistory>();
         public List<SupplyUsageHistory> DeletedRequisitionHistory { get; set; } = new List<SupplyUsageHistory>();
         public bool CopySuppliesAttachment { get; set; } = false;
-        public GasRecord ToGasRecord() { return new GasRecord { 
-            Id = Id, 
-            Cost = Cost, 
-            Date = DateTime.Parse(Date), 
-            Gallons = Gallons, 
-            Mileage = Mileage, 
-            VehicleId = VehicleId, 
+        // FEATURE: Flex Fuel - fuel type used for this fill-up ("Gasoline" or "E85")
+        public string FuelType { get; set; } = "Gasoline";
+        public GasRecord ToGasRecord() { return new GasRecord {
+            Id = Id,
+            Cost = Cost,
+            Date = DateTime.Parse(Date),
+            Gallons = Gallons,
+            Mileage = Mileage,
+            VehicleId = VehicleId,
             Files = Files,
             IsFillToFull = IsFillToFull,
             MissedFuelUp = MissedFuelUp,
             Notes = Notes,
             Tags = Tags,
             ExtraFields = ExtraFields,
-            RequisitionHistory = RequisitionHistory
+            RequisitionHistory = RequisitionHistory,
+            FuelType = FuelType
         }; }
     }
 }

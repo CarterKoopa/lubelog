@@ -17,7 +17,15 @@ namespace CarCareTracker.Controllers
             bool useMPG = userConfig.UseMPG;
             var vehicleData = _dataAccess.GetVehicleById(vehicleId);
             bool useUKMPG = !vehicleData.IsElectric && userConfig.UseUKMPG; //do not apply UK conversion on electric vehicles.
-            var computedResults = _gasHelper.GetGasRecordViewModels(result, useMPG, useUKMPG);
+            // FEATURE: Odometer Compensation - parse compensation factor and start mileage from vehicle settings
+            decimal compensationFactor = 1.0m;
+            bool hasOdometerCompensation = !string.IsNullOrWhiteSpace(vehicleData.OdometerCompensationFactor);
+            if (hasOdometerCompensation)
+            {
+                decimal.TryParse(vehicleData.OdometerCompensationFactor, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out compensationFactor);
+            }
+            int compensationStart = vehicleData.OdometerCompensationStart;
+            var computedResults = _gasHelper.GetGasRecordViewModels(result, useMPG, useUKMPG, compensationFactor, compensationStart);
             if (userConfig.UseDescending)
             {
                 computedResults = computedResults.OrderByDescending(x => DateTime.Parse(x.Date)).ThenByDescending(x => x.Mileage).ToList();
@@ -28,7 +36,11 @@ namespace CarCareTracker.Controllers
             {
                 UseKwh = vehicleIsElectric,
                 UseHours = vehicleUseHours,
-                GasRecords = computedResults
+                GasRecords = computedResults,
+                // FEATURE: Flex Fuel - pass through to view for per-type stats and column display
+                IsFlexFuel = vehicleData.IsFlexFuel,
+                // FEATURE: Odometer Compensation - pass through so view can show dashboard vs real mileage
+                HasOdometerCompensation = hasOdometerCompensation
             };
             return PartialView("Gas/_Gas", viewModel);
         }
@@ -79,7 +91,15 @@ namespace CarCareTracker.Controllers
             var vehicleData = _dataAccess.GetVehicleById(vehicleId);
             var vehicleIsElectric = vehicleData.IsElectric;
             var vehicleUseHours = vehicleData.UseHours;
-            return PartialView("Gas/_GasModal", new GasRecordInputContainer() { UseKwh = vehicleIsElectric, UseHours = vehicleUseHours, GasRecord = new GasRecordInput() { ExtraFields = _extraFieldDataAccess.GetExtraFieldsById((int)ImportMode.GasRecord).ExtraFields } });
+            // FEATURE: Flex Fuel / Odometer Compensation - pass vehicle flags into the input container so the form can show the correct UI
+            bool hasOdometerCompensation = !string.IsNullOrWhiteSpace(vehicleData.OdometerCompensationFactor);
+            return PartialView("Gas/_GasModal", new GasRecordInputContainer() {
+                UseKwh = vehicleIsElectric,
+                UseHours = vehicleUseHours,
+                IsFlexFuel = vehicleData.IsFlexFuel,
+                HasOdometerCompensation = hasOdometerCompensation,
+                GasRecord = new GasRecordInput() { ExtraFields = _extraFieldDataAccess.GetExtraFieldsById((int)ImportMode.GasRecord).ExtraFields }
+            });
         }
         [HttpGet]
         public IActionResult GetGasRecordForEditById(int gasRecordId)
@@ -104,15 +124,21 @@ namespace CarCareTracker.Controllers
                 Notes = result.Notes,
                 Tags = result.Tags,
                 RequisitionHistory = result.RequisitionHistory,
-                ExtraFields = StaticHelper.AddExtraFields(result.ExtraFields, _extraFieldDataAccess.GetExtraFieldsById((int)ImportMode.GasRecord).ExtraFields)
+                ExtraFields = StaticHelper.AddExtraFields(result.ExtraFields, _extraFieldDataAccess.GetExtraFieldsById((int)ImportMode.GasRecord).ExtraFields),
+                // FEATURE: Flex Fuel - carry the stored fuel type into the edit form so the toggle pre-selects correctly
+                FuelType = result.FuelType
             };
             var vehicleData = _dataAccess.GetVehicleById(convertedResult.VehicleId);
             var vehicleIsElectric = vehicleData.IsElectric;
             var vehicleUseHours = vehicleData.UseHours;
+            // FEATURE: Flex Fuel / Odometer Compensation - pass vehicle flags into the edit container
+            bool hasOdometerCompensation = !string.IsNullOrWhiteSpace(vehicleData.OdometerCompensationFactor);
             var viewModel = new GasRecordInputContainer()
             {
                 UseKwh = vehicleIsElectric,
                 UseHours = vehicleUseHours,
+                IsFlexFuel = vehicleData.IsFlexFuel,
+                HasOdometerCompensation = hasOdometerCompensation,
                 GasRecord = convertedResult
             };
             return PartialView("Gas/_GasModal", viewModel);

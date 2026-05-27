@@ -121,7 +121,11 @@ namespace CarCareTracker.Controllers
             var userCanModify = _userLogic.UserCanDirectlyEditVehicle(GetUserID(), vehicleId);
             viewModel.Collaborators = new VehicleCollaboratorViewModel { CanModifyCollaborators = userCanModify, Collaborators = collaborators};
             //get MPG per month.
-            var mileageData = _gasHelper.GetGasRecordViewModels(gasRecords, userConfig.UseMPG, !vehicleData.IsElectric && userConfig.UseUKMPG);
+            // FEATURE: Odometer Compensation - pass compensation params so report MPG calculations use real mileage
+            decimal reportCompFactor = 1.0m;
+            if (!string.IsNullOrWhiteSpace(vehicleData.OdometerCompensationFactor))
+                decimal.TryParse(vehicleData.OdometerCompensationFactor, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out reportCompFactor);
+            var mileageData = _gasHelper.GetGasRecordViewModels(gasRecords, userConfig.UseMPG, !vehicleData.IsElectric && userConfig.UseUKMPG, reportCompFactor, vehicleData.OdometerCompensationStart);
             string preferredFuelMileageUnit = _config.GetUserConfig(User).PreferredGasMileageUnit;
             var fuelEconomyMileageUnit = StaticHelper.GetFuelEconomyUnit(vehicleData.IsElectric, vehicleData.UseHours, userConfig.UseMPG, userConfig.UseUKMPG);
             var averageMPG = _gasHelper.GetAverageGasMileage(mileageData, userConfig.UseMPG);
@@ -224,7 +228,11 @@ namespace CarCareTracker.Controllers
 
             var userConfig = _config.GetUserConfig(User);
 
-            var mileageData = _gasHelper.GetGasRecordViewModels(gasRecords, userConfig.UseMPG, !vehicleData.IsElectric && userConfig.UseUKMPG);
+            // FEATURE: Odometer Compensation - pass compensation params so report MPG calculations use real mileage
+            decimal reportCompFactor = 1.0m;
+            if (!string.IsNullOrWhiteSpace(vehicleData.OdometerCompensationFactor))
+                decimal.TryParse(vehicleData.OdometerCompensationFactor, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out reportCompFactor);
+            var mileageData = _gasHelper.GetGasRecordViewModels(gasRecords, userConfig.UseMPG, !vehicleData.IsElectric && userConfig.UseUKMPG, reportCompFactor, vehicleData.OdometerCompensationStart);
             string preferredFuelMileageUnit = _config.GetUserConfig(User).PreferredGasMileageUnit;
             var fuelEconomyMileageUnit = StaticHelper.GetFuelEconomyUnit(vehicleData.IsElectric, vehicleData.UseHours, userConfig.UseMPG, userConfig.UseUKMPG);
             var averageMPG = _gasHelper.GetAverageGasMileage(mileageData, userConfig.UseMPG);
@@ -692,7 +700,11 @@ namespace CarCareTracker.Controllers
             string preferredFuelMileageUnit = _config.GetUserConfig(User).PreferredGasMileageUnit;
             var fuelEconomyMileageUnit = StaticHelper.GetFuelEconomyUnit(vehicleData.IsElectric, vehicleData.UseHours, userConfig.UseMPG, userConfig.UseUKMPG);
             bool invertedFuelMileageUnit = fuelEconomyMileageUnit == "l/100km" && preferredFuelMileageUnit == "km/l";
-            var mileageData = _gasHelper.GetGasRecordViewModels(gasRecords, userConfig.UseMPG, !vehicleData.IsElectric && userConfig.UseUKMPG);
+            // FEATURE: Odometer Compensation - pass compensation params so report MPG calculations use real mileage
+            decimal reportCompFactor = 1.0m;
+            if (!string.IsNullOrWhiteSpace(vehicleData.OdometerCompensationFactor))
+                decimal.TryParse(vehicleData.OdometerCompensationFactor, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out reportCompFactor);
+            var mileageData = _gasHelper.GetGasRecordViewModels(gasRecords, userConfig.UseMPG, !vehicleData.IsElectric && userConfig.UseUKMPG, reportCompFactor, vehicleData.OdometerCompensationStart);
             if (year != 0)
             {
                 mileageData.RemoveAll(x => DateTime.Parse(x.Date).Year != year);

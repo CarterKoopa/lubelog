@@ -25,5 +25,9 @@
         public List<ExtraField> ExtraFields { get; set; } = new List<ExtraField>();
         public List<UploadedFiles> Files { get; set; } = new List<UploadedFiles>();
         public bool IncludeInAverage { get { return MilesPerGallon > 0 || (!IsFillToFull && !MissedFuelUp) || (Mileage == default && !MissedFuelUp); } }
+        // FEATURE: Flex Fuel - which fuel type was used for this fill-up
+        public string FuelType { get; set; } = "Gasoline";
+        // FEATURE: Odometer Compensation - real mileage after applying the compensation factor (equals Mileage when no compensation is configured)
+        public int RealMileage { get; set; }
     }
 }

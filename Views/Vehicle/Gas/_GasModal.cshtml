@@ -46,6 +46,21 @@
 <div class="modal-body" onkeydown="handleEnter(this)">
     <form>
         <div class="form-group">
+            @* FEATURE: Flex Fuel - show a fuel type toggle when the vehicle is configured as a flex-fuel vehicle *@
+            @if (Model.IsFlexFuel)
+            {
+                <div class="row mb-2">
+                    <div class="col-12">
+                        <label>@translator.Translate(userLanguage, "Fuel Type")</label>
+                        <div class="btn-group w-100" role="group" aria-label="Fuel Type">
+                            <input type="radio" class="btn-check" name="fuelTypeToggle" id="btnFuelTypeGasoline" value="Gasoline" autocomplete="off" @(Model.GasRecord.FuelType != "E85" ? "checked" : "")>
+                            <label class="btn btn-outline-primary" for="btnFuelTypeGasoline">@translator.Translate(userLanguage, "Unleaded")</label>
+                            <input type="radio" class="btn-check" name="fuelTypeToggle" id="btnFuelTypeE85" value="E85" autocomplete="off" @(Model.GasRecord.FuelType == "E85" ? "checked" : "")>
+                            <label class="btn btn-outline-warning" for="btnFuelTypeE85">E-85</label>
+                        </div>
+                    </div>
+                </div>
+            }
             <div class="row">
                 <div class="col-md-6 col-12">
                     <input type="text" id="workAroundInput" style="height:0px; width:0px; display:none;">
@@ -54,7 +69,8 @@
                         <input type="text" id="gasRecordDate" placeholder="@translator.Translate(userLanguage,"Date refueled")" class="form-control" value="@Model.GasRecord.Date">
                         <span class="input-group-text"><i class="bi bi-calendar-event"></i></span>
                     </div>
-                    <label for="gasRecordMileage">@($"{translator.Translate(userLanguage,"Odometer Reading")}({distanceUnit})")</label>
+                    @* FEATURE: Odometer Compensation - label the mileage field as "Dashboard Mileage" when compensation is configured *@
+                    <label for="gasRecordMileage">@(Model.HasOdometerCompensation ? $"{translator.Translate(userLanguage,"Dashboard Mileage")}({distanceUnit})" : $"{translator.Translate(userLanguage,"Odometer Reading")}({distanceUnit})")</label>
                     <div class="input-group">
                         <input type="number" inputmode="numeric" id="gasRecordMileage" class="form-control" placeholder="@translator.Translate(userLanguage,"Odometer reading when refueled")" value="@(isNew || Model.GasRecord.Mileage == default ? "" : Model.GasRecord.Mileage)">
                         @if (isNew)

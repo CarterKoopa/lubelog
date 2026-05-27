@@ -270,13 +270,18 @@
 </div>
 <script>
     function GetVehicleId() {
-        return { 
-            vehicleId: @Model.Id, 
+        return {
+            vehicleId: @Model.Id,
             odometerOptional: @Model.OdometerOptional.ToString().ToLower(),
             hasOdometerAdjustment: @Model.HasOdometerAdjustment.ToString().ToLower(),
             useEngineHours: @Model.UseHours.ToString().ToLower(),
             odometerDifference: decodeHTMLEntities('@Model.OdometerDifference'),
-            odometerMultiplier: decodeHTMLEntities('@Model.OdometerMultiplier')
+            odometerMultiplier: decodeHTMLEntities('@Model.OdometerMultiplier'),
+            // FEATURE: Flex Fuel - expose flex fuel flag so JS can conditionally show fuel type UI
+            isFlexFuel: @Model.IsFlexFuel.ToString().ToLower(),
+            // FEATURE: Odometer Compensation - expose compensation settings for potential client-side use
+            odometerCompensationFactor: decodeHTMLEntities('@Model.OdometerCompensationFactor'),
+            odometerCompensationStart: @Model.OdometerCompensationStart
         };
     }
     function GetDefaultTab() {

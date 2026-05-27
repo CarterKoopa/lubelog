@@ -17,6 +17,12 @@
     var useKwh = Model.UseKwh;
     var useHours = Model.UseHours;
     var recordTags = Model.GasRecords.SelectMany(x => x.Tags).Distinct();
+    // FEATURE: Flex Fuel - determine if any E85 records exist to enable per-type stats display
+    var hasE85Records = Model.IsFlexFuel && Model.GasRecords.Any(x => x.FuelType == "E85");
+    var gasolineRecords = hasE85Records ? Model.GasRecords.Where(x => x.FuelType != "E85").ToList() : new List<GasRecordViewModel>();
+    var e85Records = hasE85Records ? Model.GasRecords.Where(x => x.FuelType == "E85").ToList() : new List<GasRecordViewModel>();
+    // FEATURE: Odometer Compensation - whether to show both dashboard and real mileage in the odometer column
+    var showDualMileage = Model.HasOdometerCompensation;
     string preferredFuelEconomyUnit = userConfig.PreferredGasMileageUnit;
     string preferredGasUnit = userConfig.PreferredGasUnit;
     string consumptionUnit;
@@ -72,6 +78,18 @@
             }
             <span class="badge bg-success" id="totalFuelConsumedLabel">@($"{translator.Translate(userLanguage, "Total Fuel Consumed")}: {Model.GasRecords.Sum(x => x.Gallons).ToString("F")}")</span>
             <span class="badge bg-success" data-aggregate-type="sum">@($"{translator.Translate(userLanguage, "Total Cost")}: {Model.GasRecords.Sum(x => x.Cost).ToString(gasCostFormat)}")</span>
+            @* FEATURE: Flex Fuel - show per-fuel-type average fuel economy badges when both unleaded and E-85 records exist *@
+            @if (hasE85Records)
+            {
+                if (gasolineRecords.Any(x => x.MilesPerGallon > 0))
+                {
+                    <span class="badge bg-primary">@($"{translator.Translate(userLanguage, "Unleaded Avg")} {fuelEconomyUnit}: {gasHelper.GetAverageGasMileage(gasolineRecords, useMPG)}")</span>
+                }
+                if (e85Records.Any(x => x.MilesPerGallon > 0))
+                {
+                    <span class="badge bg-warning text-dark">@($"E-85 Avg {fuelEconomyUnit}: {gasHelper.GetAverageGasMileage(e85Records, useMPG)}")</span>
+                }
+            }
             @foreach (string recordTag in recordTags)
             {
                 <span onclick="toggleGasFilter(this)" class="user-select-none rounded-pill badge bg-secondary tagfilter" style="cursor:pointer;">@recordTag</span>
@@ -161,6 +179,16 @@
                             <label class="form-check-label stretched-link" for="chkCol_Notes">@translator.Translate(userLanguage, "Notes")</label>
                         </div>
                     </li>
+                    @* FEATURE: Flex Fuel - add Fuel Type to the column visibility dropdown for flex-fuel vehicles *@
+                    @if (Model.IsFlexFuel)
+                    {
+                        <li class="dropdown-item" draggable="true" ondragstart="handleTableColumnDragStart(event)" ondragover="handleTableColumnDragOver(event)" ondragend="handleTableColumnDragEnd('GasRecord')">
+                            <div class="list-group-item">
+                                <input class="form-check-input col-visible-toggle" data-column-toggle='fueltype' onChange="showTableColumns(this, 'GasRecord')" type="checkbox" id="chkCol_FuelType" checked>
+                                <label class="form-check-label stretched-link" for="chkCol_FuelType">@translator.Translate(userLanguage, "Fuel Type")</label>
+                            </div>
+                        </li>
+                    }
                     @foreach (string extraFieldColumn in extraFields)
                     {
                         var elementId = Guid.NewGuid();
@@ -187,7 +215,8 @@
             <thead class="sticky-top">
                 <tr class="d-flex">
                     <th scope="col" class="col-2 flex-grow-1 text-truncate" data-column="daterefueled">@translator.Translate(userLanguage, "Date Refueled")</th>
-                    <th scope="col" class="col-2 flex-grow-1 flex-shrink-1 text-truncate" data-column="odometer">@($"{translator.Translate(userLanguage, "Odometer")}({distanceUnit})")</th>
+                    @* FEATURE: Odometer Compensation - show "Dashboard / Real" header when compensation is active *@
+                    <th scope="col" class="col-2 flex-grow-1 flex-shrink-1 text-truncate" data-column="odometer">@(showDualMileage ? $"{translator.Translate(userLanguage, "Odometer")} (Dash/Real, {distanceUnit})" : $"{translator.Translate(userLanguage, "Odometer")}({distanceUnit})")</th>
                     <th scope="col" class="col-1 flex-grow-1 flex-shrink-1 text-truncate" data-column="delta" style="cursor:pointer;" onclick="toggleSort('gas-tab-pane', this)">@($"Δ({distanceUnit})")</th>
                     <th scope="col" class="col-2 flex-grow-1 flex-shrink-1 text-truncate" data-column="consumption" data-gas="consumption" data-unit="@consumptionUnit" onclick="toggleSort('gas-tab-pane', this)" oncontextmenu="toggleUnits(this)" style="cursor:pointer;">@($"{translator.Translate(userLanguage, "Consumption")}({consumptionUnit})")</th>
                     <th scope="col" class="col-3 flex-grow-1 flex-shrink-1 text-truncate" data-column="fueleconomy" data-gas="fueleconomy" data-unit="@fuelEconomyUnit" onclick="toggleSort('gas-tab-pane', this)" oncontextmenu="toggleUnits(this)" style="cursor:pointer;">@($"{@translator.Translate(userLanguage, "Fuel Economy")}({fuelEconomyUnit})")</th>
@@ -195,6 +224,11 @@
                     <th scope="col" class="col-1 flex-grow-1 flex-shrink-1 text-truncate" data-column="unitcost" onclick="toggleSort('gas-tab-pane', this)" style="cursor:pointer;">@translator.Translate(userLanguage, "Unit Cost")</th>
                     <th scope="col" class="col-1 flex-grow-1 flex-shrink-1 text-truncate" style='display:none;' data-column="attachments">@translator.Translate(userLanguage, "Attachments")</th>
                     <th scope="col" class="col-3 flex-grow-1 flex-shrink-1 text-truncate" style='display:none;' data-column="notes">@translator.Translate(userLanguage, "Notes")</th>
+                    @* FEATURE: Flex Fuel - show a Fuel Type column when the vehicle is flex fuel *@
+                    @if (Model.IsFlexFuel)
+                    {
+                        <th scope="col" class="col-1 flex-grow-1 flex-shrink-1 text-truncate" data-column="fueltype">@translator.Translate(userLanguage, "Fuel Type")</th>
+                    }
                     @foreach (string extraFieldColumn in extraFields)
                     {
                         <th scope="col" style='display:none;' class="col-2 flex-grow-1 flex-shrink-1 text-truncate" data-column="@extraFieldColumn">@extraFieldColumn</th>
@@ -206,7 +240,8 @@
                 {
                     <tr class="d-flex user-select-none" style="cursor:pointer;" onmouseup="stopEvent()" ontouchstart="detectRowLongTouch(this)" ontouchend="detectRowTouchEndPremature(this)" data-rowId="@gasRecord.Id" oncontextmenu="showTableContextMenu(this)" onmousemove="rangeMouseMove(this)" onclick="handleTableRowClick(this, showEditGasRecordModal,@gasRecord.Id)" data-tags='@string.Join(" ", gasRecord.Tags)'>
                         <td data-label="@translator.Translate(userLanguage, "Date Refueled")" class="col-2 flex-grow-1 text-truncate" data-column="daterefueled">@gasRecord.Date</td>
-                        <td data-label="@($"{translator.Translate(userLanguage, "Odometer")}({distanceUnit})")" class="col-2 flex-grow-1 flex-shrink-1 text-truncate" data-column="odometer" data-gas-type="mileage" data-gas-aggregate="@gasRecord.DeltaMileage" data-gas-original="@gasRecord.Mileage">@(gasRecord.Mileage == default ? "---" : gasRecord.Mileage.ToString())</td>
+                        @* FEATURE: Odometer Compensation - show "dashboard / real" mileage when compensation is configured *@
+                        <td data-label="@(showDualMileage ? $"{translator.Translate(userLanguage, "Odometer")} (Dash/Real, {distanceUnit})" : $"{translator.Translate(userLanguage, "Odometer")}({distanceUnit})")" class="col-2 flex-grow-1 flex-shrink-1 text-truncate" data-column="odometer" data-gas-type="mileage" data-gas-aggregate="@gasRecord.DeltaMileage" data-gas-original="@gasRecord.Mileage">@(gasRecord.Mileage == default ? "---" : (showDualMileage && gasRecord.RealMileage != gasRecord.Mileage ? $"{gasRecord.Mileage} / {gasRecord.RealMileage}" : gasRecord.Mileage.ToString()))</td>
                         <td data-label="@($"Δ({distanceUnit})")" class="col-1 flex-grow-1 flex-shrink-1 text-truncate" data-column="delta" data-gas-type="totaldistance">@(gasRecord.DeltaMileage == default ? "---" : gasRecord.DeltaMileage)</td>
                         <td data-label="@($"{translator.Translate(userLanguage, "Consumption")}({consumptionUnit})")" class="col-2 flex-grow-1 flex-shrink-1 text-truncate" data-column="consumption" data-gas-type="consumption" data-gas-aggregate="@gasRecord.Gallons">@gasRecord.Gallons.ToString(gasConsumptionFormat)</td>
                         <td data-label="@($"{@translator.Translate(userLanguage, "Fuel Economy")}({fuelEconomyUnit})")" class="col-3 flex-grow-1 flex-shrink-1 text-truncate" data-column="fueleconomy" data-gas-type="fueleconomy" data-aggregated='@(gasRecord.IncludeInAverage.ToString().ToLower())'>@(gasRecord.MilesPerGallon == 0 ? "---" : gasRecord.MilesPerGallon.ToString("F"))</td>
@@ -214,6 +249,20 @@
                         <td data-label="@translator.Translate(userLanguage, "Unit Cost")" class="col-1 flex-grow-1 flex-shrink-1 text-truncate" data-column="unitcost" data-gas-type="unitcost">@((hideZero && gasRecord.CostPerGallon == default) ? "---" : gasRecord.CostPerGallon.ToString(gasCostFormat))</td>
                         <td data-label="@translator.Translate(userLanguage, "Attachments")" class="col-1 flex-grow-1 flex-shrink-1 text-truncate" style='display:none;' data-column="attachments">@await Html.PartialAsync("_AttachmentColumn", gasRecord.Files)</td>
                         <td data-label="@translator.Translate(userLanguage, "Notes")" class="col-3 flex-grow-1 flex-shrink-1 text-truncate" style='display:none;' data-column="notes">@StaticHelper.TruncateStrings(gasRecord.Notes)</td>
+                        @* FEATURE: Flex Fuel - show an E-85 badge in the Fuel Type column for flex-fuel vehicles *@
+                        @if (Model.IsFlexFuel)
+                        {
+                            <td data-label="@translator.Translate(userLanguage, "Fuel Type")" class="col-1 flex-grow-1 flex-shrink-1 text-truncate" data-column="fueltype">
+                                @if (gasRecord.FuelType == "E85")
+                                {
+                                    <span class="badge bg-warning text-dark">E-85</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">@translator.Translate(userLanguage, "Unleaded")</span>
+                                }
+                            </td>
+                        }
                         @foreach (string extraFieldColumn in extraFields)
                         {
                             <td data-label="@extraFieldColumn" class="col-2 flex-grow-1 flex-shrink-1 text-truncate" style='display:none;' data-column="@extraFieldColumn">

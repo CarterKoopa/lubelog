@@ -93,6 +93,8 @@ function getAndValidateGasRecordValues() {
     var gasTags = $("#gasRecordTag").val();
     var vehicleId = GetVehicleId().vehicleId;
     var gasRecordId = getGasRecordModelData().id;
+    // FEATURE: Flex Fuel - read the selected fuel type from the toggle (defaults to "Gasoline" for non-flex-fuel vehicles)
+    var gasFuelType = $('input[name="fuelTypeToggle"]:checked').val() || "Gasoline";
     //Odometer Adjustments
     if (isNaN(gasMileage) && GetVehicleId().odometerOptional) {
         gasMileage = '0';
@@ -156,7 +158,9 @@ function getAndValidateGasRecordValues() {
         extraFields: extraFields.extraFields,
         requisitionHistory: supplyUsageHistory,
         deletedRequisitionHistory: deletedSupplyUsageHistory,
-        copySuppliesAttachment: copySuppliesAttachments
+        copySuppliesAttachment: copySuppliesAttachments,
+        // FEATURE: Flex Fuel - include the selected fuel type in the saved record
+        fuelType: gasFuelType
     }
 }
 

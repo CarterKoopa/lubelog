@@ -48,10 +48,12 @@
                 </div>
                 <div class="col-12 col-md-6">
                     <label for="inputFuelType">@translator.Translate(userLanguage, "Fuel Type")</label>
+                    @* FEATURE: Flex Fuel - added "Flex Fuel" option; vehicles with this type can run on both regular unleaded and E-85 *@
                     <select class="form-select" id="inputFuelType")>
-                        <!option value="Gasoline" @(!Model.IsDiesel && !Model.IsElectric ? "selected" : "")>@translator.Translate(userLanguage, "Gasoline")</!option>
+                        <!option value="Gasoline" @(!Model.IsDiesel && !Model.IsElectric && !Model.IsFlexFuel ? "selected" : "")>@translator.Translate(userLanguage, "Gasoline")</!option>
                         <!option value="Diesel" @(Model.IsDiesel ? "selected" : "")>@translator.Translate(userLanguage, "Diesel")</!option>
                         <!option value="Electric" @(Model.IsElectric ? "selected" : "")>@translator.Translate(userLanguage, "Electric")</!option>
+                        <!option value="FlexFuel" @(Model.IsFlexFuel ? "selected" : "")>@translator.Translate(userLanguage, "Flex Fuel (Unleaded / E-85)")</!option>
                     </select>
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" role="switch" id="inputUseHours" checked="@Model.UseHours">
@@ -75,6 +77,21 @@
                             <input type="text" id="inputOdometerMultiplier" class="form-control" placeholder="@translator.Translate(userLanguage, "Odometer Multiplier")" value="@Model.OdometerMultiplier">
                             <label for="inputOdometerDifference">@translator.Translate(userLanguage, "Odometer Difference")</label>
                             <input type="text" id="inputOdometerDifference" class="form-control" placeholder="@translator.Translate(userLanguage, "Odometer Difference")" value="@Model.OdometerDifference">
+                        </div>
+                    </div>
+                    @* FEATURE: Odometer Compensation - toggle and fields for correcting odometer readings from non-stock tires.
+                       When enabled, mileage entered is treated as "dashboard mileage" and real mileage is computed
+                       by multiplying miles driven after OdometerCompensationStart by OdometerCompensationFactor. *@
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" onchange="toggleOdometerCompensation()" id="inputHasOdometerCompensation" checked="@(!string.IsNullOrWhiteSpace(Model.OdometerCompensationFactor))">
+                        <label class="form-check-label" for="inputHasOdometerCompensation">@translator.Translate(userLanguage, "Odometer Compensation (Non-Stock Tires)")</label>
+                    </div>
+                    <div class="collapse @(!string.IsNullOrWhiteSpace(Model.OdometerCompensationFactor) ? "show" : "")" id="odometerCompensation">
+                        <div>
+                            <label for="inputOdometerCompensationFactor">@translator.Translate(userLanguage, "Compensation Factor")</label>
+                            <input type="text" inputmode="decimal" onkeydown="interceptDecimalKeys(event)" onkeyup="fixDecimalInput(this, 4)" id="inputOdometerCompensationFactor" class="form-control" placeholder="@translator.Translate(userLanguage, "e.g. 1.087")" value="@Model.OdometerCompensationFactor">
+                            <label for="inputOdometerCompensationStart">@translator.Translate(userLanguage, "Start Mileage (Dashboard)")</label>
+                            <input type="number" inputmode="numeric" id="inputOdometerCompensationStart" class="form-control" placeholder="@translator.Translate(userLanguage, "Dashboard mileage when compensation begins")" value="@(Model.OdometerCompensationStart == 0 ? "" : Model.OdometerCompensationStart.ToString())">
                         </div>
                     </div>
                     <div class="accordion accordion-flush" id="vehicleModalAccordion">

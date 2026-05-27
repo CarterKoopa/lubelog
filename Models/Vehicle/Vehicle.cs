@@ -19,6 +19,8 @@ namespace CarCareTracker.Models
         public decimal SoldPrice { get; set; }
         public bool IsElectric { get; set; } = false;
         public bool IsDiesel { get; set; } = false;
+        // FEATURE: Flex Fuel - indicates vehicle can run on both regular unleaded and E-85
+        public bool IsFlexFuel { get; set; } = false;
         public bool UseHours { get; set; } = false;
         public bool OdometerOptional { get; set; } = false;
         public List<ExtraField> ExtraFields { get; set; } = new List<ExtraField>();
@@ -35,6 +37,11 @@ namespace CarCareTracker.Models
         [JsonConverter(typeof(FromIntOptional))]
         public string OdometerDifference { get; set; } = "0";
         public List<DashboardMetric> DashboardMetrics { get; set; } = new List<DashboardMetric>();
+        // FEATURE: Odometer Compensation - factor applied to mileage after OdometerCompensationStart to correct for non-stock tire size.
+        // Empty string means compensation is disabled.
+        public string OdometerCompensationFactor { get; set; } = "";
+        // Dashboard mileage reading at which the compensation factor begins to apply.
+        public int OdometerCompensationStart { get; set; } = 0;
         /// <summary>
         /// Determines what is displayed in place of the license plate.
         /// </summary>

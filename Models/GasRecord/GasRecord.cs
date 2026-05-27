@@ -21,5 +21,7 @@
         public List<string> Tags { get; set; } = new List<string>();
         public List<ExtraField> ExtraFields { get; set; } = new List<ExtraField>();
         public List<SupplyUsageHistory> RequisitionHistory { get; set; } = new List<SupplyUsageHistory>();
+        // FEATURE: Flex Fuel - tracks which fuel type was used for this fill-up ("Gasoline" or "E85")
+        public string FuelType { get; set; } = "Gasoline";
     }
 }
