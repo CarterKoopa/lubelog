@@ -31,6 +31,12 @@
         // This is used for per-type MPG averages: the MPG shown at fill N represents efficiency of the fuel
         // that was actually consumed since fill N-1, so it should be credited to fill N-1's fuel type.
         public string MpgFuelType { get; set; } = "Gasoline";
+        // FEATURE: Flex Fuel - effective distance and fuel consumed for this segment, spanning this fill and
+        // any preceding partial fills whose unFactored accumulators rolled into this fill-to-full calculation.
+        // Only meaningful when MilesPerGallon > 0 (i.e. fill-to-full records). Used by GetAverageGasMileageForType
+        // so that orphaned partial fills (those followed by a missed fill-up) cannot inflate per-type averages.
+        public int EffectiveDeltaMileage { get; set; }
+        public decimal EffectiveGallons { get; set; }
         // FEATURE: Odometer Compensation - real mileage after applying the compensation factor (equals Mileage when no compensation is configured)
         public int RealMileage { get; set; }
     }

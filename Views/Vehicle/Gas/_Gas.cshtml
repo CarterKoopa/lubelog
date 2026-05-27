@@ -89,16 +89,18 @@
             }
             <span class="badge bg-success" id="totalFuelConsumedLabel">@($"{translator.Translate(userLanguage, "Total Fuel Consumed")}: {Model.GasRecords.Sum(x => x.Gallons).ToString("F")}")</span>
             <span class="badge bg-success" data-aggregate-type="sum">@($"{translator.Translate(userLanguage, "Total Cost")}: {Model.GasRecords.Sum(x => x.Cost).ToString(gasCostFormat)}")</span>
-            @* FEATURE: Flex Fuel - show per-fuel-type average fuel economy badges when both unleaded and E-85 records exist *@
+            @* FEATURE: Flex Fuel - show per-fuel-type average fuel economy badges when pure segments exist.
+               Uses GetAverageGasMileageForType (not GetAverageGasMileage) so that partial fills followed by
+               missed fill-ups cannot inflate the per-type average via orphaned high-mileage/low-gallon records. *@
             @if (hasE85Records)
             {
                 if (gasolineRecords.Any(x => x.MilesPerGallon > 0))
                 {
-                    <span class="badge bg-primary">@($"{translator.Translate(userLanguage, "Unleaded Avg")} {fuelEconomyUnit}: {gasHelper.GetAverageGasMileage(gasolineRecords, useMPG)}")</span>
+                    <span class="badge bg-primary">@($"{translator.Translate(userLanguage, "Unleaded Avg")} {fuelEconomyUnit}: {gasHelper.GetAverageGasMileageForType(gasolineRecords, useMPG)}")</span>
                 }
                 if (e85Records.Any(x => x.MilesPerGallon > 0))
                 {
-                    <span class="badge bg-warning text-dark">@($"E-85 Avg {fuelEconomyUnit}: {gasHelper.GetAverageGasMileage(e85Records, useMPG)}")</span>
+                    <span class="badge bg-warning text-dark">@($"E-85 Avg {fuelEconomyUnit}: {gasHelper.GetAverageGasMileageForType(e85Records, useMPG)}")</span>
                 }
             }
             @foreach (string recordTag in recordTags)

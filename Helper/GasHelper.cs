@@ -7,6 +7,9 @@ namespace CarCareTracker.Helper
         // FEATURE: Odometer Compensation - added compensationFactor and compensationStart parameters
         List<GasRecordViewModel> GetGasRecordViewModels(List<GasRecord> result, bool useMPG, bool useUKMPG, decimal compensationFactor = 1.0m, int compensationStart = 0);
         string GetAverageGasMileage(List<GasRecordViewModel> results, bool useMPG);
+        // FEATURE: Flex Fuel - per-type average that uses EffectiveDeltaMileage/EffectiveGallons so that
+        // orphaned partial fills (partial fill followed by a missed fill-up) cannot inflate the result.
+        string GetAverageGasMileageForType(List<GasRecordViewModel> results, bool useMPG);
     }
     public class GasHelper : IGasHelper
     {
@@ -26,6 +29,35 @@ namespace CarCareTracker.Helper
                     }
                     return averageGasMileage.ToString("F");
                 } catch
+                {
+                    return "0";
+                }
+            }
+            return "0";
+        }
+
+        // FEATURE: Flex Fuel - per-type average using effective segment totals instead of raw delta values.
+        // Only fill-to-full records (MilesPerGallon > 0) are used. EffectiveDeltaMileage and EffectiveGallons
+        // each span the fill-to-full AND any preceding partial fills in the same segment, so:
+        //   - partial-fill + fill-to-full sequences are accounted for correctly
+        //   - orphaned partial fills (preceded a missed fill-up) are simply absent (MPG=0, excluded)
+        public string GetAverageGasMileageForType(List<GasRecordViewModel> results, bool useMPG)
+        {
+            var recordsToCalculate = results.Where(x => x.MilesPerGallon > 0 && x.EffectiveGallons > 0);
+            if (recordsToCalculate.Any())
+            {
+                try
+                {
+                    var totalMileage = recordsToCalculate.Sum(x => (decimal)x.EffectiveDeltaMileage);
+                    var totalGallons = recordsToCalculate.Sum(x => x.EffectiveGallons);
+                    var averageGasMileage = totalMileage / totalGallons;
+                    if (!useMPG && averageGasMileage > 0)
+                    {
+                        averageGasMileage = 100 / averageGasMileage;
+                    }
+                    return averageGasMileage.ToString("F");
+                }
+                catch
                 {
                     return "0";
                 }
@@ -126,6 +158,11 @@ namespace CarCareTracker.Helper
                                 gasRecordViewModel.MilesPerGallon = 0;
                             }
                         }
+                        // FEATURE: Flex Fuel - capture effective segment totals BEFORE resetting accumulators.
+                        // These span this fill AND any preceding partial fills, so per-type averages correctly
+                        // account for partial-fill sequences without orphaned partials inflating the result.
+                        gasRecordViewModel.EffectiveDeltaMileage = (int)(unFactoredMileage + deltaMileage);
+                        gasRecordViewModel.EffectiveGallons = unFactoredConsumption + convertedConsumption;
                         //reset unFactored vars
                         unFactoredConsumption = 0;
                         unFactoredMileage = 0;
