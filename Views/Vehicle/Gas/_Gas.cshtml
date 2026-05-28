@@ -32,6 +32,24 @@
     var hasE85Records = Model.IsFlexFuel && Model.GasRecords.Any(x => x.FuelType == "E85");
     var gasolineRecords = hasE85Records ? Model.GasRecords.Where(x => x.FuelType != "E85" && x.MpgFuelType != "E85").ToList() : new List<GasRecordViewModel>();
     var e85Records = hasE85Records ? Model.GasRecords.Where(x => x.FuelType == "E85" && x.MpgFuelType == "E85").ToList() : new List<GasRecordViewModel>();
+    // FEATURE: Flex Fuel - E-85 breakeven: the minimum percentage by which E-85 must be cheaper per gallon
+    // than unleaded for the cost per mile to be equal or better.  Formula (distance/fuel basis):
+    //   breakeven% = (1 − avg_e85_mpg / avg_unleaded_mpg) × 100
+    // Computed using EffectiveDeltaMileage / EffectiveGallons (same basis as GetAverageGasMileageForType)
+    // so orphaned partial fills cannot distort the result.  Only shown when both type averages are available.
+    decimal? e85BreakevenPct = null;
+    if (hasE85Records)
+    {
+        var gasEffRecords = gasolineRecords.Where(x => x.MilesPerGallon > 0 && x.EffectiveGallons > 0).ToList();
+        var e85EffRecords = e85Records.Where(x => x.MilesPerGallon > 0 && x.EffectiveGallons > 0).ToList();
+        if (gasEffRecords.Any() && e85EffRecords.Any())
+        {
+            decimal gasAvgMpg  = gasEffRecords.Sum(x => (decimal)x.EffectiveDeltaMileage) / gasEffRecords.Sum(x => x.EffectiveGallons);
+            decimal e85AvgMpg  = e85EffRecords.Sum(x => (decimal)x.EffectiveDeltaMileage) / e85EffRecords.Sum(x => x.EffectiveGallons);
+            if (gasAvgMpg > 0)
+                e85BreakevenPct = (1m - e85AvgMpg / gasAvgMpg) * 100m;
+        }
+    }
     // FEATURE: Odometer Compensation - whether to show both dashboard and real mileage in the odometer column
     var showDualMileage = Model.HasOdometerCompensation;
     string preferredFuelEconomyUnit = userConfig.PreferredGasMileageUnit;
@@ -101,6 +119,18 @@
                 if (e85Records.Any(x => x.MilesPerGallon > 0))
                 {
                     <span class="badge bg-warning text-dark">@($"E-85 Avg {fuelEconomyUnit}: {gasHelper.GetAverageGasMileageForType(e85Records, useMPG)}")</span>
+                }
+                @* FEATURE: Flex Fuel - show the E-85 breakeven discount once both type averages are available *@
+                @if (e85BreakevenPct.HasValue)
+                {
+                    @if (e85BreakevenPct.Value > 0)
+                    {
+                        <span class="badge bg-info text-dark" title="E-85 must be at least this much cheaper per gallon than unleaded to match the cost per mile">@($"E-85 Breakeven: {e85BreakevenPct.Value.ToString("F1")}% cheaper")</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-info text-dark" title="E-85 is delivering more miles per gallon than unleaded in this dataset">@("E-85 cost-competitive at equal price")</span>
+                    }
                 }
             }
             @foreach (string recordTag in recordTags)
