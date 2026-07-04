@@ -86,6 +86,13 @@ namespace CarCareTracker.Helper
             // FEATURE: Flex Fuel - track the previous fill's fuel type so MPG at fill N is credited to
             // the fuel that was actually burned (fill N-1's type), not the fuel added at fill N.
             string previousFuelType = "Gasoline";
+            // FEATURE: Flex Fuel - a fill-to-full's MPG segment can span multiple fills back through
+            // partial fills, so a single one-fill-back lookup is not enough to know what was burned.
+            // segmentFuelType tracks the fuel burned across the whole accumulated segment; if any leg
+            // of the segment burned a different type, the segment is marked mixed and its closing
+            // record gets MpgFuelType = "Mixed" so it is excluded from both per-type averages.
+            string segmentFuelType = string.Empty;
+            bool segmentMixedFuel = false;
             decimal unFactoredConsumption = 0.00M;
             int unFactoredMileage = 0;
             //perform computation.
@@ -112,6 +119,16 @@ namespace CarCareTracker.Helper
                     if (deltaMileage < 0)
                     {
                         deltaMileage = 0;
+                    }
+                    // FEATURE: Flex Fuel - record what this leg burned (the previous fill's type) into the
+                    // segment tracker; differing legs within one accumulated segment mark it as mixed.
+                    if (string.IsNullOrEmpty(segmentFuelType))
+                    {
+                        segmentFuelType = previousFuelType;
+                    }
+                    else if (segmentFuelType != previousFuelType)
+                    {
+                        segmentMixedFuel = true;
                     }
                     var gasRecordViewModel = new GasRecordViewModel()
                     {
@@ -143,6 +160,9 @@ namespace CarCareTracker.Helper
                         //reset unFactored vars for missed fuel up because the numbers wont be reliable.
                         unFactoredConsumption = 0;
                         unFactoredMileage = 0;
+                        // FEATURE: Flex Fuel - missed fuel up also ends the segment for purity tracking
+                        segmentFuelType = string.Empty;
+                        segmentMixedFuel = false;
                     }
                     else if (currentObject.IsFillToFull && currentObject.Mileage != default)
                     {
@@ -163,9 +183,16 @@ namespace CarCareTracker.Helper
                         // account for partial-fill sequences without orphaned partials inflating the result.
                         gasRecordViewModel.EffectiveDeltaMileage = (int)(unFactoredMileage + deltaMileage);
                         gasRecordViewModel.EffectiveGallons = unFactoredConsumption + convertedConsumption;
+                        // FEATURE: Flex Fuel - the closing record's MpgFuelType must reflect the WHOLE segment,
+                        // not just the immediately preceding fill: segments whose legs burned different types
+                        // are marked "Mixed" so they are excluded from both per-type averages.
+                        gasRecordViewModel.MpgFuelType = segmentMixedFuel ? "Mixed" : segmentFuelType;
                         //reset unFactored vars
                         unFactoredConsumption = 0;
                         unFactoredMileage = 0;
+                        // FEATURE: Flex Fuel - fill to full ends the segment for purity tracking
+                        segmentFuelType = string.Empty;
+                        segmentMixedFuel = false;
                     }
                     else
                     {

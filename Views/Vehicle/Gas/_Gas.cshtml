@@ -20,18 +20,17 @@
     // FEATURE: Flex Fuel - determine if any E85 records exist to enable per-type stats display.
     // hasE85Records checks FuelType (what was ADDED) to decide whether the per-type section is relevant.
     //
-    // Per-type averages use a "pure segment" filter: both FuelType (what was ADDED at this fill)
-    // and MpgFuelType (what was BURNED since the previous fill) must be the same type.
-    // This excludes "transition" fills — e.g. adding gasoline after an E-85 tank, or vice versa —
-    // because the measured MPG reflects a mixed or changing fuel composition and should not be
-    // credited to either type's average. Missed fill-ups are separately excluded by IncludeInAverage.
+    // Per-type buckets are decided SOLELY by MpgFuelType: the fuel that was BURNED during the segment
+    // ending at this fill (the previous fill's type — for multi-fill segments, GasHelper tracks the
+    // whole segment and reports "Mixed" if legs burned different types, excluding it from both buckets).
+    // The fuel ADDED at the closing fill is irrelevant here; it gets burned in the NEXT segment.
     //
-    // Consequence: the Unleaded Avg only appears once there is a gasoline-after-gasoline segment,
-    // and the E-85 Avg only appears once there is an E-85-after-E-85 segment (i.e. at least two
-    // consecutive E-85 fills). A single E-85 fill produces no E-85 average data yet.
+    // Consequence: after the very first E-85 fill there is no E-85 average yet — the E-85 in the tank
+    // hasn't been driven on. The NEXT fill-to-full closes the E-85-burn segment and produces the first
+    // E-85 data point.
     var hasE85Records = Model.IsFlexFuel && Model.GasRecords.Any(x => x.FuelType == "E85");
-    var gasolineRecords = hasE85Records ? Model.GasRecords.Where(x => x.FuelType != "E85" && x.MpgFuelType != "E85").ToList() : new List<GasRecordViewModel>();
-    var e85Records = hasE85Records ? Model.GasRecords.Where(x => x.FuelType == "E85" && x.MpgFuelType == "E85").ToList() : new List<GasRecordViewModel>();
+    var gasolineRecords = hasE85Records ? Model.GasRecords.Where(x => x.MpgFuelType == "Gasoline").ToList() : new List<GasRecordViewModel>();
+    var e85Records = hasE85Records ? Model.GasRecords.Where(x => x.MpgFuelType == "E85").ToList() : new List<GasRecordViewModel>();
     // FEATURE: Flex Fuel - E-85 breakeven: the minimum percentage by which E-85 must be cheaper per gallon
     // than unleaded for the cost per mile to be equal or better.  Formula (distance/fuel basis):
     //   breakeven% = (1 − avg_e85_mpg / avg_unleaded_mpg) × 100
@@ -121,9 +120,9 @@
                     <span class="badge bg-warning text-dark">@($"E-85 Avg {fuelEconomyUnit}: {gasHelper.GetAverageGasMileageForType(e85Records, useMPG)}")</span>
                 }
                 @* FEATURE: Flex Fuel - show the E-85 breakeven discount once both type averages are available *@
-                @if (e85BreakevenPct.HasValue)
+                if (e85BreakevenPct.HasValue)
                 {
-                    @if (e85BreakevenPct.Value > 0)
+                    if (e85BreakevenPct.Value > 0)
                     {
                         <span class="badge bg-info text-dark" title="E-85 must be at least this much cheaper per gallon than unleaded to match the cost per mile">@($"E-85 Breakeven: {e85BreakevenPct.Value.ToString("F1")}% cheaper")</span>
                     }

@@ -285,11 +285,12 @@ namespace CarCareTracker.Controllers
                 Response.StatusCode = 400;
                 return Json(OperationResponse.Failed($"Input object invalid, Identifier {input.Identifier} is specified but the value is not found in extra fields."));
             }
-            var validFuelTypes = new List<string> { "Gasoline", "Diesel", "Electric" };
+            // FEATURE: Flex Fuel - accept FlexFuel as a valid fuel type via the API
+            var validFuelTypes = new List<string> { "Gasoline", "Diesel", "Electric", "FlexFuel" };
             if (!validFuelTypes.Contains(input.FuelType))
             {
                 Response.StatusCode = 400;
-                return Json(OperationResponse.Failed("Input object invalid, Fuel Type must be either Gasoline, Diesel, or Eletric"));
+                return Json(OperationResponse.Failed("Input object invalid, Fuel Type must be either Gasoline, Diesel, Electric, or FlexFuel"));
             }
             try
             {
@@ -312,6 +313,10 @@ namespace CarCareTracker.Controllers
                         break;
                     case "Electric":
                         vehicle.IsElectric = true;
+                        break;
+                    // FEATURE: Flex Fuel - map the FlexFuel fuel type to the vehicle flag
+                    case "FlexFuel":
+                        vehicle.IsFlexFuel = true;
                         break;
                 }
                 _dataAccess.SaveVehicle(vehicle);
@@ -362,11 +367,12 @@ namespace CarCareTracker.Controllers
                 Response.StatusCode = 400;
                 return Json(OperationResponse.Failed($"Input object invalid, Identifier {input.Identifier} is specified but the value is not found in extra fields."));
             }
-            var validFuelTypes = new List<string> { "Gasoline", "Diesel", "Electric" };
+            // FEATURE: Flex Fuel - accept FlexFuel as a valid fuel type via the API
+            var validFuelTypes = new List<string> { "Gasoline", "Diesel", "Electric", "FlexFuel" };
             if (!validFuelTypes.Contains(input.FuelType))
             {
                 Response.StatusCode = 400;
-                return Json(OperationResponse.Failed("Input object invalid, Fuel Type must be either Gasoline, Diesel, or Eletric"));
+                return Json(OperationResponse.Failed("Input object invalid, Fuel Type must be either Gasoline, Diesel, Electric, or FlexFuel"));
             }
             try
             {
@@ -387,15 +393,11 @@ namespace CarCareTracker.Controllers
                     existingVehicle.OdometerOptional = string.IsNullOrWhiteSpace(input.OdometerOptional) ? false : bool.Parse(input.OdometerOptional);
                     existingVehicle.ExtraFields = input.ExtraFields;
                     existingVehicle.Tags = string.IsNullOrWhiteSpace(input.Tags) ? new List<string>() : input.Tags.Split(' ').Distinct().ToList();
-                    switch (input.FuelType)
-                    {
-                        case "Diesel":
-                            existingVehicle.IsDiesel = true;
-                            break;
-                        case "Electric":
-                            existingVehicle.IsElectric = true;
-                            break;
-                    }
+                    // FEATURE: Flex Fuel - assign all fuel type flags explicitly so switching fuel types
+                    // via the API clears the previous flag (the old switch only ever set flags to true).
+                    existingVehicle.IsDiesel = input.FuelType == "Diesel";
+                    existingVehicle.IsElectric = input.FuelType == "Electric";
+                    existingVehicle.IsFlexFuel = input.FuelType == "FlexFuel";
                     _dataAccess.SaveVehicle(existingVehicle);
                     _eventLogic.PublishEvent(GetUserID(), WebHookPayload.Generic($"Updated Vehicle {existingVehicle.Year} {existingVehicle.Make} {existingVehicle.Model}({StaticHelper.GetVehicleIdentifier(existingVehicle)}) via API", "vehicle.update.api", User.Identity?.Name ?? string.Empty, existingVehicle.Id.ToString()));
                     return Json(OperationResponse.Succeed("Vehicle Updated"));

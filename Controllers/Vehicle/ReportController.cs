@@ -530,7 +530,13 @@ namespace CarCareTracker.Controllers
             var vehicleRecords = _vehicleLogic.GetVehicleRecords(vehicleId);
             bool useMPG = _config.GetUserConfig(User).UseMPG;
             bool useUKMPG = !vehicleHistory.VehicleData.IsElectric && _config.GetUserConfig(User).UseUKMPG;
-            var gasViewModels = _gasHelper.GetGasRecordViewModels(vehicleRecords.GasRecords, useMPG, useUKMPG);
+            // FEATURE: Odometer Compensation - pass compensation params so vehicle history fuel economy uses real mileage
+            decimal historyCompFactor = 1.0m;
+            if (!string.IsNullOrWhiteSpace(vehicleHistory.VehicleData.OdometerCompensationFactor))
+            {
+                decimal.TryParse(vehicleHistory.VehicleData.OdometerCompensationFactor, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out historyCompFactor);
+            }
+            var gasViewModels = _gasHelper.GetGasRecordViewModels(vehicleRecords.GasRecords, useMPG, useUKMPG, historyCompFactor, vehicleHistory.VehicleData.OdometerCompensationStart);
             //filter by tags
             if (reportParameter.Tags.Any())
             {

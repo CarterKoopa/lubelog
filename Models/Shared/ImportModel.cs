@@ -26,6 +26,8 @@ namespace CarCareTracker.Models
         public string PartialFuelUp { get; set; } = string.Empty;
         public string IsFillToFull { get; set; } = string.Empty;
         public string MissedFuelUp { get; set; } = string.Empty;
+        // FEATURE: Flex Fuel - fuel type column for gas record CSV imports ("Gasoline" or "E85"/"E-85")
+        public string FuelType { get; set; } = string.Empty;
         public string PartNumber { get; set; } = string.Empty;
         public string PartSupplier { get; set; } = string.Empty;
         public string PartQuantity { get; set; } = string.Empty;
@@ -126,6 +128,8 @@ namespace CarCareTracker.Models
         public string IsFillToFull { get; set; } = string.Empty;
         [JsonConverter(typeof(FromBoolOptional))]
         public string MissedFuelUp { get; set; } = string.Empty;
+        // FEATURE: Flex Fuel - fuel type added at this fill-up ("Gasoline" or "E85"), included in exports/imports
+        public string FuelType { get; set; } = string.Empty;
         public string Notes { get; set; } = string.Empty;
         public string Tags { get; set; } = string.Empty;
         public List<ExtraField> ExtraFields { get; set; } = new List<ExtraField>();

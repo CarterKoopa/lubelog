@@ -887,6 +887,8 @@ namespace CarCareTracker.Helper
             _csv.WriteField(nameof(GasRecordExportModel.FuelEconomy));
             _csv.WriteField(nameof(GasRecordExportModel.IsFillToFull));
             _csv.WriteField(nameof(GasRecordExportModel.MissedFuelUp));
+            // FEATURE: Flex Fuel - include fuel type in gas record CSV exports
+            _csv.WriteField(nameof(GasRecordExportModel.FuelType));
             _csv.WriteField(nameof(GasRecordExportModel.Notes));
             _csv.WriteField(nameof(GasRecordExportModel.Tags));
             foreach (string extraHeader in extraHeaders)
@@ -903,6 +905,8 @@ namespace CarCareTracker.Helper
                 _csv.WriteField(genericRecord.FuelEconomy);
                 _csv.WriteField(genericRecord.IsFillToFull);
                 _csv.WriteField(genericRecord.MissedFuelUp);
+                // FEATURE: Flex Fuel - include fuel type in gas record CSV exports
+                _csv.WriteField(genericRecord.FuelType);
                 _csv.WriteField(genericRecord.Notes);
                 _csv.WriteField(genericRecord.Tags);
                 foreach (string extraHeader in extraHeaders)

@@ -61,6 +61,8 @@ namespace CarCareTracker.Controllers
                             Cost = 45.67M.ToString("C"),
                             IsFillToFull = true.ToString(),
                             MissedFuelUp = false.ToString(),
+                            // FEATURE: Flex Fuel - show the fuel type column in the sample import template
+                            FuelType = "Gasoline",
                             Notes = "Test Note",
                             Tags = "test1 test2"
                         } };
@@ -608,7 +610,13 @@ namespace CarCareTracker.Controllers
                 var vehicleData = _dataAccess.GetVehicleById(vehicleId);
                 bool useMPG = _config.GetUserConfig(User).UseMPG;
                 bool useUKMPG = !vehicleData.IsElectric && _config.GetUserConfig(User).UseUKMPG; //do not apply UK conversion on electric vehicles.
-                var convertedRecords = _gasHelper.GetGasRecordViewModels(vehicleRecords, useMPG, useUKMPG);
+                // FEATURE: Odometer Compensation - pass compensation params so exported fuel economy matches the UI
+                decimal exportCompFactor = 1.0m;
+                if (!string.IsNullOrWhiteSpace(vehicleData.OdometerCompensationFactor))
+                {
+                    decimal.TryParse(vehicleData.OdometerCompensationFactor, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out exportCompFactor);
+                }
+                var convertedRecords = _gasHelper.GetGasRecordViewModels(vehicleRecords, useMPG, useUKMPG, exportCompFactor, vehicleData.OdometerCompensationStart);
                 //filter by tags
                 if (exportParameters.Tags.Any())
                 {
@@ -644,6 +652,8 @@ namespace CarCareTracker.Controllers
                         Odometer = x.Mileage.ToString(),
                         IsFillToFull = x.IsFillToFull.ToString(),
                         MissedFuelUp = x.MissedFuelUp.ToString(),
+                        // FEATURE: Flex Fuel - include fuel type in gas record exports
+                        FuelType = x.FuelType,
                         Notes = x.Notes,
                         Tags = string.Join(" ", x.Tags),
                         ExtraFields = x.ExtraFields
@@ -776,6 +786,12 @@ namespace CarCareTracker.Controllers
                                         var possibleMissedFuelUpValues = new List<string> { "1", "true" };
                                         var parsedBool = possibleMissedFuelUpValues.Contains(importModel.MissedFuelUp.Trim().ToLower());
                                         convertedRecord.MissedFuelUp = parsedBool;
+                                    }
+                                    // FEATURE: Flex Fuel - parse the fuel type column if present ("E85"/"E-85" case-insensitive; anything else is Gasoline)
+                                    if (!string.IsNullOrWhiteSpace(importModel.FuelType))
+                                    {
+                                        var possibleE85Values = new List<string> { "e85", "e-85" };
+                                        convertedRecord.FuelType = possibleE85Values.Contains(importModel.FuelType.Trim().ToLower()) ? "E85" : "Gasoline";
                                     }
                                     return convertedRecord;
                                 }).ToList();

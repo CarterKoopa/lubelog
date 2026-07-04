@@ -22,7 +22,14 @@ namespace CarCareTracker.Controllers
             foreach (int vehicleId in vehicleIds)
             {
                 var rawVehicleRecords = _gasRecordDataAccess.GetGasRecordsByVehicleId(vehicleId);
-                vehicleRecords.AddRange(_gasHelper.GetGasRecordViewModels(rawVehicleRecords, parameters.UseMPG, parameters.UseUKMPG));
+                // FEATURE: Odometer Compensation - apply the vehicle's compensation so API fuel economy matches the UI
+                var vehicleData = vehicles.First(x => x.Id == vehicleId);
+                decimal apiCompFactor = 1.0m;
+                if (!string.IsNullOrWhiteSpace(vehicleData.OdometerCompensationFactor))
+                {
+                    decimal.TryParse(vehicleData.OdometerCompensationFactor, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out apiCompFactor);
+                }
+                vehicleRecords.AddRange(_gasHelper.GetGasRecordViewModels(rawVehicleRecords, parameters.UseMPG, parameters.UseUKMPG, apiCompFactor, vehicleData.OdometerCompensationStart));
             }
             if (parameters.Id != default)
             {
@@ -53,6 +60,8 @@ namespace CarCareTracker.Controllers
                     FuelEconomy = x.MilesPerGallon.ToString(),
                     IsFillToFull = x.IsFillToFull.ToString(),
                     MissedFuelUp = x.MissedFuelUp.ToString(),
+                    // FEATURE: Flex Fuel - include fuel type in API responses
+                    FuelType = x.FuelType,
                     Notes = x.Notes,
                     ExtraFields = x.ExtraFields,
                     Files = x.Files,
@@ -79,7 +88,14 @@ namespace CarCareTracker.Controllers
                 return Json(response);
             }
             var rawVehicleRecords = _gasRecordDataAccess.GetGasRecordsByVehicleId(vehicleId);
-            var vehicleRecords = _gasHelper.GetGasRecordViewModels(rawVehicleRecords, parameters.UseMPG, parameters.UseUKMPG);
+            // FEATURE: Odometer Compensation - apply the vehicle's compensation so API fuel economy matches the UI
+            var vehicleData = _dataAccess.GetVehicleById(vehicleId);
+            decimal apiCompFactor = 1.0m;
+            if (!string.IsNullOrWhiteSpace(vehicleData.OdometerCompensationFactor))
+            {
+                decimal.TryParse(vehicleData.OdometerCompensationFactor, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out apiCompFactor);
+            }
+            var vehicleRecords = _gasHelper.GetGasRecordViewModels(rawVehicleRecords, parameters.UseMPG, parameters.UseUKMPG, apiCompFactor, vehicleData.OdometerCompensationStart);
             if (parameters.Id != default)
             {
                 vehicleRecords.RemoveAll(x => x.Id != parameters.Id);
@@ -109,6 +125,8 @@ namespace CarCareTracker.Controllers
                     FuelEconomy = x.MilesPerGallon.ToString(),
                     IsFillToFull = x.IsFillToFull.ToString(),
                     MissedFuelUp = x.MissedFuelUp.ToString(),
+                    // FEATURE: Flex Fuel - include fuel type in API responses
+                    FuelType = x.FuelType,
                     Notes = x.Notes,
                     ExtraFields = x.ExtraFields,
                     Files = x.Files,
@@ -174,7 +192,9 @@ namespace CarCareTracker.Controllers
                     Cost = decimal.Parse(input.Cost),
                     ExtraFields = input.ExtraFields,
                     Files = input.Files,
-                    Tags = string.IsNullOrWhiteSpace(input.Tags) ? new List<string>() : input.Tags.Split(' ').Distinct().ToList()
+                    Tags = string.IsNullOrWhiteSpace(input.Tags) ? new List<string>() : input.Tags.Split(' ').Distinct().ToList(),
+                    // FEATURE: Flex Fuel - optional fuel type ("E85"/"E-85" case-insensitive; anything else is Gasoline)
+                    FuelType = !string.IsNullOrWhiteSpace(input.FuelType) && new List<string> { "e85", "e-85" }.Contains(input.FuelType.Trim().ToLower()) ? "E85" : "Gasoline"
                 };
                 _gasRecordDataAccess.SaveGasRecordToVehicle(gasRecord);
                 if (_config.GetUserConfig(User).EnableAutoOdometerInsert)
