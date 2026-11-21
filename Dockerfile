@@ -11,3 +11,5 @@ WORKDIR /App
 COPY --from=build-env /App/out .
 EXPOSE 8080
 CMD ["./CarCareTracker"]
+
+COPY --from=ghcr.io/tarampampam/microcheck:1 /bin/portcheck /bin/portcheck
