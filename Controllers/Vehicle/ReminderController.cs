@@ -117,6 +117,14 @@ namespace CarCareTracker.Controllers
             {
                 return Json(OperationResponse.Failed("Access Denied"));
             }
+            if (reminderRecord.Id != default)
+            {
+                var existingRecord = _reminderRecordDataAccess.GetReminderRecordById(reminderRecord.Id);
+                if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.Edit))
+                {
+                    return Json(OperationResponse.Failed("Access Denied"));
+                }
+            }
             var result = _reminderRecordDataAccess.SaveReminderRecordToVehicle(reminderRecord.ToReminderRecord());
             if (result)
             {
@@ -145,7 +153,7 @@ namespace CarCareTracker.Controllers
             //security check.
             if (!_userLogic.UserCanEditVehicle(GetUserID(), result.VehicleId, HouseholdPermission.View))
             {
-                return Redirect("/Error/Unauthorized");
+                return Forbid();
             }
             var vehicleData = _dataAccess.GetVehicleById(result.VehicleId);
             var vehicleUseHours = vehicleData.UseHours;

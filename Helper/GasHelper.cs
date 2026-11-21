@@ -5,7 +5,7 @@ namespace CarCareTracker.Helper
     public interface IGasHelper
     {
         // FEATURE: Odometer Compensation - added compensationFactor and compensationStart parameters
-        List<GasRecordViewModel> GetGasRecordViewModels(List<GasRecord> result, bool useMPG, bool useUKMPG, decimal compensationFactor = 1.0m, int compensationStart = 0);
+        List<GasRecordViewModel> GetGasRecordViewModels(List<GasRecord> result, bool useMPG, bool useUKMPG, bool isElectric, decimal compensationFactor = 1.0m, int compensationStart = 0);
         string GetAverageGasMileage(List<GasRecordViewModel> results, bool useMPG);
         // FEATURE: Flex Fuel - per-type average that uses EffectiveDeltaMileage/EffectiveGallons so that
         // orphaned partial fills (partial fill followed by a missed fill-up) cannot inflate the result.
@@ -76,13 +76,14 @@ namespace CarCareTracker.Helper
 
         // FEATURE: Odometer Compensation - accepts compensationFactor and compensationStart to compute real mileage for delta/MPG calculations.
         // FEATURE: Flex Fuel - passes FuelType from GasRecord through to GasRecordViewModel.
-        public List<GasRecordViewModel> GetGasRecordViewModels(List<GasRecord> result, bool useMPG, bool useUKMPG, decimal compensationFactor = 1.0m, int compensationStart = 0)
+        public List<GasRecordViewModel> GetGasRecordViewModels(List<GasRecord> result, bool useMPG, bool useUKMPG, bool isElectric, decimal compensationFactor = 1.0m, int compensationStart = 0)
         {
             //need to order by to get correct results
-            result = result.OrderBy(x => x.Date).ThenBy(x => x.Mileage).ToList();
+            result = result.OrderBy(x => x.Date).ThenBy(x => x.Mileage).ThenBy(x=>x.EndingSoc).ToList();
             var computedResults = new List<GasRecordViewModel>();
             // FEATURE: Odometer Compensation - track previous real mileage so deltas use real distances
             int previousRealMileage = 0;
+            int previousEndingSoc = 0;
             // FEATURE: Flex Fuel - track the previous fill's fuel type so MPG at fill N is credited to
             // the fuel that was actually burned (fill N-1's type), not the fuel added at fill N.
             string previousFuelType = "Gasoline";
@@ -99,136 +100,240 @@ namespace CarCareTracker.Helper
             for (int i = 0; i < result.Count; i++)
             {
                 var currentObject = result[i];
-                decimal convertedConsumption;
-                if (useUKMPG && useMPG)
-                {
-                    //if we're using UK MPG and the user wants imperial calculation insteace of l/100km
-                    //if UK MPG is selected then the gas consumption are stored in liters but need to convert into UK gallons for computation.
-                    convertedConsumption = currentObject.Gallons / 4.546M;
-                }
-                else
-                {
-                    convertedConsumption = currentObject.Gallons;
-                }
                 // FEATURE: Odometer Compensation - compute real mileage for this record
                 int realMileage = ComputeRealMileage(currentObject.Mileage, compensationFactor, compensationStart);
-                if (i > 0)
+                if (isElectric)
                 {
-                    // FEATURE: Odometer Compensation - use real mileage delta for accurate fuel economy calculation
-                    var deltaMileage = realMileage - previousRealMileage;
-                    if (deltaMileage < 0)
+                    if (i > 0)
                     {
-                        deltaMileage = 0;
-                    }
-                    // FEATURE: Flex Fuel - record what this leg burned (the previous fill's type) into the
-                    // segment tracker; differing legs within one accumulated segment mark it as mixed.
-                    if (string.IsNullOrEmpty(segmentFuelType))
-                    {
-                        segmentFuelType = previousFuelType;
-                    }
-                    else if (segmentFuelType != previousFuelType)
-                    {
-                        segmentMixedFuel = true;
-                    }
-                    var gasRecordViewModel = new GasRecordViewModel()
-                    {
-                        Id = currentObject.Id,
-                        VehicleId = currentObject.VehicleId,
-                        MonthId = currentObject.Date.Month,
-                        Date = currentObject.Date.ToShortDateString(),
-                        Mileage = currentObject.Mileage,
-                        // FEATURE: Odometer Compensation - store real mileage for display alongside dashboard mileage
-                        RealMileage = realMileage,
-                        Gallons = convertedConsumption,
-                        Cost = currentObject.Cost,
-                        DeltaMileage = deltaMileage,
-                        CostPerGallon = convertedConsumption > 0.00M ? currentObject.Cost / convertedConsumption : 0,
-                        IsFillToFull = currentObject.IsFillToFull,
-                        MissedFuelUp = currentObject.MissedFuelUp,
-                        Notes = currentObject.Notes,
-                        Tags = currentObject.Tags,
-                        ExtraFields = currentObject.ExtraFields,
-                        Files = currentObject.Files,
-                        // FEATURE: Flex Fuel - FuelType = what was ADDED; MpgFuelType = what was BURNED (previous fill's type)
-                        FuelType = currentObject.FuelType,
-                        MpgFuelType = previousFuelType
-                    };
-                    if (currentObject.MissedFuelUp)
-                    {
-                        //if they missed a fuel up, we skip MPG calculation.
-                        gasRecordViewModel.MilesPerGallon = 0;
-                        //reset unFactored vars for missed fuel up because the numbers wont be reliable.
-                        unFactoredConsumption = 0;
-                        unFactoredMileage = 0;
-                        // FEATURE: Flex Fuel - missed fuel up also ends the segment for purity tracking
-                        segmentFuelType = string.Empty;
-                        segmentMixedFuel = false;
-                    }
-                    else if (currentObject.IsFillToFull && currentObject.Mileage != default)
-                    {
-                        //if user filled to full and an odometer is provided, otherwise we will defer calculations
-                        if (convertedConsumption > 0.00M && deltaMileage > 0)
+                        decimal convertedConsumption;
+                        decimal convertedStartSoc = currentObject.StartingSoc / 100M;
+                        decimal convertedEndSoc = currentObject.EndingSoc / 100M;
+                        decimal convertedPreviousEndingSoc = previousEndingSoc / 100M;
+                        try
                         {
-                            try
+                            decimal currentBatteryCapacity = currentObject.Gallons / (convertedEndSoc - convertedStartSoc);
+                            convertedConsumption = convertedPreviousEndingSoc > 0.00M ? (convertedPreviousEndingSoc - convertedStartSoc) * currentBatteryCapacity : 0.00M;
+                            if (convertedConsumption < 0.00M) //negative consumption values can be caused by start soc greater than previous ending soc
                             {
-                                gasRecordViewModel.MilesPerGallon = useMPG ? (unFactoredMileage + deltaMileage) / (unFactoredConsumption + convertedConsumption) : 100 / ((unFactoredMileage + deltaMileage) / (unFactoredConsumption + convertedConsumption));
-                            }
-                            catch
-                            {
-                                gasRecordViewModel.MilesPerGallon = 0;
+                                convertedConsumption = 0.00M;
                             }
                         }
-                        // FEATURE: Flex Fuel - capture effective segment totals BEFORE resetting accumulators.
-                        // These span this fill AND any preceding partial fills, so per-type averages correctly
-                        // account for partial-fill sequences without orphaned partials inflating the result.
-                        gasRecordViewModel.EffectiveDeltaMileage = (int)(unFactoredMileage + deltaMileage);
-                        gasRecordViewModel.EffectiveGallons = unFactoredConsumption + convertedConsumption;
-                        // FEATURE: Flex Fuel - the closing record's MpgFuelType must reflect the WHOLE segment,
-                        // not just the immediately preceding fill: segments whose legs burned different types
-                        // are marked "Mixed" so they are excluded from both per-type averages.
-                        gasRecordViewModel.MpgFuelType = segmentMixedFuel ? "Mixed" : segmentFuelType;
-                        //reset unFactored vars
-                        unFactoredConsumption = 0;
-                        unFactoredMileage = 0;
-                        // FEATURE: Flex Fuel - fill to full ends the segment for purity tracking
-                        segmentFuelType = string.Empty;
-                        segmentMixedFuel = false;
+                        catch
+                        {
+                            convertedConsumption = 0.00M;
+                        }
+                        // FEATURE: Odometer Compensation - use real mileage delta for accurate fuel economy calculation
+                        var deltaMileage = realMileage - previousRealMileage;
+                        if (deltaMileage < 0)
+                        {
+                            deltaMileage = 0;
+                        }
+                        var gasRecordViewModel = new GasRecordViewModel()
+                        {
+                            Id = currentObject.Id,
+                            VehicleId = currentObject.VehicleId,
+                            MonthId = currentObject.Date.Month,
+                            Date = currentObject.Date.ToShortDateString(),
+                            Mileage = currentObject.Mileage,
+                            // FEATURE: Odometer Compensation - store real mileage for display alongside dashboard mileage
+                            RealMileage = realMileage,
+                            Gallons = convertedConsumption,
+                            Cost = currentObject.Cost,
+                            DeltaMileage = deltaMileage,
+                            CostPerGallon = currentObject.Gallons > 0.00M ? currentObject.Cost / currentObject.Gallons : 0,
+                            StartingSoc = currentObject.StartingSoc,
+                            EndingSoc = currentObject.EndingSoc,
+                            IsFillToFull = currentObject.IsFillToFull,
+                            MissedFuelUp = currentObject.MissedFuelUp,
+                            Notes = currentObject.Notes,
+                            Tags = currentObject.Tags,
+                            ExtraFields = currentObject.ExtraFields,
+                            Files = currentObject.Files
+                        };
+                        if (currentObject.MissedFuelUp)
+                        {
+                            //if they missed a fuel up, we skip MPG calculation.
+                            gasRecordViewModel.MilesPerGallon = 0;
+                        }
+                        else if (currentObject.Mileage != default)
+                        {
+                            if (convertedConsumption > 0.00M && deltaMileage > 0)
+                            {
+                                try
+                                {
+                                    gasRecordViewModel.MilesPerGallon = useMPG ? (unFactoredMileage + deltaMileage) / (unFactoredConsumption + convertedConsumption) : 100 / ((unFactoredMileage + deltaMileage) / (unFactoredConsumption + convertedConsumption));
+                                }
+                                catch
+                                {
+                                    gasRecordViewModel.MilesPerGallon = 0;
+                                }
+                            }
+                        }
+                        computedResults.Add(gasRecordViewModel);
                     }
                     else
                     {
-                        unFactoredConsumption += convertedConsumption;
-                        unFactoredMileage += deltaMileage;
-                        gasRecordViewModel.MilesPerGallon = 0;
+                        computedResults.Add(new GasRecordViewModel()
+                        {
+                            Id = currentObject.Id,
+                            VehicleId = currentObject.VehicleId,
+                            MonthId = currentObject.Date.Month,
+                            Date = currentObject.Date.ToShortDateString(),
+                            Mileage = currentObject.Mileage,
+                            // FEATURE: Odometer Compensation - store real mileage even for the first record
+                            RealMileage = realMileage,
+                            Gallons = currentObject.Gallons,
+                            Cost = currentObject.Cost,
+                            DeltaMileage = 0,
+                            MilesPerGallon = 0,
+                            CostPerGallon = currentObject.Gallons > 0.00M ? currentObject.Cost / currentObject.Gallons : 0,
+                            StartingSoc = currentObject.StartingSoc,
+                            EndingSoc = currentObject.EndingSoc,
+                            IsFillToFull = currentObject.IsFillToFull,
+                            MissedFuelUp = currentObject.MissedFuelUp,
+                            Notes = currentObject.Notes,
+                            Tags = currentObject.Tags,
+                            ExtraFields = currentObject.ExtraFields,
+                            Files = currentObject.Files
+                        });
                     }
-                    computedResults.Add(gasRecordViewModel);
+                    if (currentObject.EndingSoc != default)
+                    {
+                        previousEndingSoc = currentObject.EndingSoc;
+                    }
                 }
                 else
                 {
-                    computedResults.Add(new GasRecordViewModel()
+                    decimal convertedConsumption;
+                    if (useUKMPG && useMPG)
                     {
-                        Id = currentObject.Id,
-                        VehicleId = currentObject.VehicleId,
-                        MonthId = currentObject.Date.Month,
-                        Date = currentObject.Date.ToShortDateString(),
-                        Mileage = currentObject.Mileage,
-                        // FEATURE: Odometer Compensation - store real mileage even for the first record
-                        RealMileage = realMileage,
-                        Gallons = convertedConsumption,
-                        Cost = currentObject.Cost,
-                        DeltaMileage = 0,
-                        MilesPerGallon = 0,
-                        CostPerGallon = convertedConsumption > 0.00M ? currentObject.Cost / convertedConsumption : 0,
-                        IsFillToFull = currentObject.IsFillToFull,
-                        MissedFuelUp = currentObject.MissedFuelUp,
-                        Notes = currentObject.Notes,
-                        Tags = currentObject.Tags,
-                        ExtraFields = currentObject.ExtraFields,
-                        Files = currentObject.Files,
-                        // FEATURE: Flex Fuel - first record has no prior fill, so MpgFuelType defaults to "Gasoline";
-                        // MilesPerGallon is always 0 here so it won't affect any per-type averages
-                        FuelType = currentObject.FuelType,
-                        MpgFuelType = "Gasoline"
-                    });
+                        //if we're using UK MPG and the user wants imperial calculation insteace of l/100km
+                        //if UK MPG is selected then the gas consumption are stored in liters but need to convert into UK gallons for computation.
+                        convertedConsumption = currentObject.Gallons / 4.546M;
+                    }
+                    else
+                    {
+                        convertedConsumption = currentObject.Gallons;
+                    }
+                    if (i > 0)
+                    {
+                        // FEATURE: Odometer Compensation - use real mileage delta for accurate fuel economy calculation
+                        var deltaMileage = realMileage - previousRealMileage;
+                        if (deltaMileage < 0)
+                        {
+                            deltaMileage = 0;
+                        }
+                        // FEATURE: Flex Fuel - record what this leg burned (the previous fill's type) into the
+                        // segment tracker; differing legs within one accumulated segment mark it as mixed.
+                        if (string.IsNullOrEmpty(segmentFuelType))
+                        {
+                            segmentFuelType = previousFuelType;
+                        }
+                        else if (segmentFuelType != previousFuelType)
+                        {
+                            segmentMixedFuel = true;
+                        }
+                        var gasRecordViewModel = new GasRecordViewModel()
+                        {
+                            Id = currentObject.Id,
+                            VehicleId = currentObject.VehicleId,
+                            MonthId = currentObject.Date.Month,
+                            Date = currentObject.Date.ToShortDateString(),
+                            Mileage = currentObject.Mileage,
+                            // FEATURE: Odometer Compensation - store real mileage for display alongside dashboard mileage
+                            RealMileage = realMileage,
+                            Gallons = convertedConsumption,
+                            Cost = currentObject.Cost,
+                            DeltaMileage = deltaMileage,
+                            CostPerGallon = convertedConsumption > 0.00M ? currentObject.Cost / convertedConsumption : 0,
+                            IsFillToFull = currentObject.IsFillToFull,
+                            MissedFuelUp = currentObject.MissedFuelUp,
+                            Notes = currentObject.Notes,
+                            Tags = currentObject.Tags,
+                            ExtraFields = currentObject.ExtraFields,
+                            Files = currentObject.Files,
+                            // FEATURE: Flex Fuel - FuelType = what was ADDED; MpgFuelType = what was BURNED (previous fill's type)
+                            FuelType = currentObject.FuelType,
+                            MpgFuelType = previousFuelType
+                        };
+                        if (currentObject.MissedFuelUp)
+                        {
+                            //if they missed a fuel up, we skip MPG calculation.
+                            gasRecordViewModel.MilesPerGallon = 0;
+                            //reset unFactored vars for missed fuel up because the numbers wont be reliable.
+                            unFactoredConsumption = 0;
+                            unFactoredMileage = 0;
+                            // FEATURE: Flex Fuel - missed fuel up also ends the segment for purity tracking
+                            segmentFuelType = string.Empty;
+                            segmentMixedFuel = false;
+                        }
+                        else if (currentObject.IsFillToFull && currentObject.Mileage != default)
+                        {
+                            //if user filled to full and an odometer is provided, otherwise we will defer calculations
+                            if (convertedConsumption > 0.00M && deltaMileage > 0)
+                            {
+                                try
+                                {
+                                    gasRecordViewModel.MilesPerGallon = useMPG ? (unFactoredMileage + deltaMileage) / (unFactoredConsumption + convertedConsumption) : 100 / ((unFactoredMileage + deltaMileage) / (unFactoredConsumption + convertedConsumption));
+                                }
+                                catch
+                                {
+                                    gasRecordViewModel.MilesPerGallon = 0;
+                                }
+                            }
+                            // FEATURE: Flex Fuel - capture effective segment totals BEFORE resetting accumulators.
+                            // These span this fill AND any preceding partial fills, so per-type averages correctly
+                            // account for partial-fill sequences without orphaned partials inflating the result.
+                            gasRecordViewModel.EffectiveDeltaMileage = (int)(unFactoredMileage + deltaMileage);
+                            gasRecordViewModel.EffectiveGallons = unFactoredConsumption + convertedConsumption;
+                            // FEATURE: Flex Fuel - the closing record's MpgFuelType must reflect the WHOLE segment,
+                            // not just the immediately preceding fill: segments whose legs burned different types
+                            // are marked "Mixed" so they are excluded from both per-type averages.
+                            gasRecordViewModel.MpgFuelType = segmentMixedFuel ? "Mixed" : segmentFuelType;
+                            //reset unFactored vars
+                            unFactoredConsumption = 0;
+                            unFactoredMileage = 0;
+                            // FEATURE: Flex Fuel - fill to full ends the segment for purity tracking
+                            segmentFuelType = string.Empty;
+                            segmentMixedFuel = false;
+                        }
+                        else
+                        {
+                            unFactoredConsumption += convertedConsumption;
+                            unFactoredMileage += deltaMileage;
+                            gasRecordViewModel.MilesPerGallon = 0;
+                        }
+                        computedResults.Add(gasRecordViewModel);
+                    }
+                    else
+                    {
+                        computedResults.Add(new GasRecordViewModel()
+                        {
+                            Id = currentObject.Id,
+                            VehicleId = currentObject.VehicleId,
+                            MonthId = currentObject.Date.Month,
+                            Date = currentObject.Date.ToShortDateString(),
+                            Mileage = currentObject.Mileage,
+                            // FEATURE: Odometer Compensation - store real mileage even for the first record
+                            RealMileage = realMileage,
+                            Gallons = convertedConsumption,
+                            Cost = currentObject.Cost,
+                            DeltaMileage = 0,
+                            MilesPerGallon = 0,
+                            CostPerGallon = convertedConsumption > 0.00M ? currentObject.Cost / convertedConsumption : 0,
+                            IsFillToFull = currentObject.IsFillToFull,
+                            MissedFuelUp = currentObject.MissedFuelUp,
+                            Notes = currentObject.Notes,
+                            Tags = currentObject.Tags,
+                            ExtraFields = currentObject.ExtraFields,
+                            Files = currentObject.Files,
+                            // FEATURE: Flex Fuel - first record has no prior fill, so MpgFuelType defaults to "Gasoline";
+                            // MilesPerGallon is always 0 here so it won't affect any per-type averages
+                            FuelType = currentObject.FuelType,
+                            MpgFuelType = "Gasoline"
+                        });
+                    }
                 }
                 if (currentObject.Mileage != default)
                 {

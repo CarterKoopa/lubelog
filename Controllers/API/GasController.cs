@@ -11,25 +11,22 @@ namespace CarCareTracker.Controllers
         [Route("/api/vehicle/gasrecords/all")]
         public IActionResult AllGasRecords(MethodParameter parameters)
         {
-            List<int> vehicleIds = new List<int>();
             var vehicles = _dataAccess.GetVehicles();
             if (!User.IsInRole(nameof(UserData.IsRootUser)))
             {
                 vehicles = _userLogic.FilterUserVehicles(vehicles, GetUserID());
             }
-            vehicleIds.AddRange(vehicles.Select(x => x.Id));
             List<GasRecordViewModel> vehicleRecords = new List<GasRecordViewModel>();
-            foreach (int vehicleId in vehicleIds)
+            foreach (Vehicle vehicle in vehicles)
             {
-                var rawVehicleRecords = _gasRecordDataAccess.GetGasRecordsByVehicleId(vehicleId);
+                var rawVehicleRecords = _gasRecordDataAccess.GetGasRecordsByVehicleId(vehicle.Id);
                 // FEATURE: Odometer Compensation - apply the vehicle's compensation so API fuel economy matches the UI
-                var vehicleData = vehicles.First(x => x.Id == vehicleId);
                 decimal apiCompFactor = 1.0m;
-                if (!string.IsNullOrWhiteSpace(vehicleData.OdometerCompensationFactor))
+                if (!string.IsNullOrWhiteSpace(vehicle.OdometerCompensationFactor))
                 {
-                    decimal.TryParse(vehicleData.OdometerCompensationFactor, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out apiCompFactor);
+                    decimal.TryParse(vehicle.OdometerCompensationFactor, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out apiCompFactor);
                 }
-                vehicleRecords.AddRange(_gasHelper.GetGasRecordViewModels(rawVehicleRecords, parameters.UseMPG, parameters.UseUKMPG, apiCompFactor, vehicleData.OdometerCompensationStart));
+                vehicleRecords.AddRange(_gasHelper.GetGasRecordViewModels(rawVehicleRecords, parameters.UseMPG, parameters.UseUKMPG, vehicle.IsElectric, apiCompFactor, vehicle.OdometerCompensationStart));
             }
             if (parameters.Id != default)
             {
@@ -60,6 +57,8 @@ namespace CarCareTracker.Controllers
                     FuelEconomy = x.MilesPerGallon.ToString(),
                     IsFillToFull = x.IsFillToFull.ToString(),
                     MissedFuelUp = x.MissedFuelUp.ToString(),
+                    StartingSoc = x.StartingSoc.ToString(),
+                    EndingSoc = x.EndingSoc.ToString(),
                     // FEATURE: Flex Fuel - include fuel type in API responses
                     FuelType = x.FuelType,
                     Notes = x.Notes,
@@ -95,7 +94,7 @@ namespace CarCareTracker.Controllers
             {
                 decimal.TryParse(vehicleData.OdometerCompensationFactor, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out apiCompFactor);
             }
-            var vehicleRecords = _gasHelper.GetGasRecordViewModels(rawVehicleRecords, parameters.UseMPG, parameters.UseUKMPG, apiCompFactor, vehicleData.OdometerCompensationStart);
+            var vehicleRecords = _gasHelper.GetGasRecordViewModels(rawVehicleRecords, parameters.UseMPG, parameters.UseUKMPG, vehicleData.IsElectric, apiCompFactor, vehicleData.OdometerCompensationStart);
             if (parameters.Id != default)
             {
                 vehicleRecords.RemoveAll(x => x.Id != parameters.Id);
@@ -125,6 +124,8 @@ namespace CarCareTracker.Controllers
                     FuelEconomy = x.MilesPerGallon.ToString(),
                     IsFillToFull = x.IsFillToFull.ToString(),
                     MissedFuelUp = x.MissedFuelUp.ToString(),
+                    StartingSoc = x.StartingSoc.ToString(),
+                    EndingSoc = x.EndingSoc.ToString(),
                     // FEATURE: Flex Fuel - include fuel type in API responses
                     FuelType = x.FuelType,
                     Notes = x.Notes,
@@ -188,6 +189,8 @@ namespace CarCareTracker.Controllers
                     Gallons = decimal.Parse(input.FuelConsumed),
                     IsFillToFull = bool.Parse(input.IsFillToFull),
                     MissedFuelUp = bool.Parse(input.MissedFuelUp),
+                    StartingSoc = string.IsNullOrWhiteSpace(input.StartingSoc) ? 20 : int.Parse(input.StartingSoc),
+                    EndingSoc = string.IsNullOrWhiteSpace(input.EndingSoc) ? 80 : int.Parse(input.EndingSoc),
                     Notes = string.IsNullOrWhiteSpace(input.Notes) ? "" : input.Notes,
                     Cost = decimal.Parse(input.Cost),
                     ExtraFields = input.ExtraFields,
@@ -232,7 +235,7 @@ namespace CarCareTracker.Controllers
             //security check.
             if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.Delete))
             {
-                Response.StatusCode = 401;
+                Response.StatusCode = 403;
                 return Json(OperationResponse.Failed("Access Denied, you don't have access to this vehicle."));
             }
             var result = _gasRecordDataAccess.DeleteGasRecordById(existingRecord.Id);
@@ -280,7 +283,7 @@ namespace CarCareTracker.Controllers
                     //check if user has access to the vehicleId
                     if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.Edit))
                     {
-                        Response.StatusCode = 401;
+                        Response.StatusCode = 403;
                         return Json(OperationResponse.Failed("Access Denied, you don't have access to this vehicle."));
                     }
                     existingRecord.Date = DateTime.Parse(input.Date);
@@ -288,6 +291,8 @@ namespace CarCareTracker.Controllers
                     existingRecord.Gallons = decimal.Parse(input.FuelConsumed);
                     existingRecord.IsFillToFull = bool.Parse(input.IsFillToFull);
                     existingRecord.MissedFuelUp = bool.Parse(input.MissedFuelUp);
+                    existingRecord.StartingSoc = string.IsNullOrWhiteSpace(input.StartingSoc) ? 20 : int.Parse(input.StartingSoc);
+                    existingRecord.EndingSoc = string.IsNullOrWhiteSpace(input.EndingSoc) ? 80 : int.Parse(input.EndingSoc);
                     existingRecord.Notes = string.IsNullOrWhiteSpace(input.Notes) ? "" : input.Notes;
                     existingRecord.Cost = decimal.Parse(input.Cost);
                     existingRecord.ExtraFields = input.ExtraFields;

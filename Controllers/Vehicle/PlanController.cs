@@ -22,6 +22,14 @@ namespace CarCareTracker.Controllers
             {
                 return Json(OperationResponse.Failed("Access Denied"));
             }
+            if (planRecord.Id != default)
+            {
+                var existingRecord = _planRecordDataAccess.GetPlanRecordById(planRecord.Id);
+                if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.Edit))
+                {
+                    return Json(OperationResponse.Failed("Access Denied"));
+                }
+            }
             //populate createdDate
             if (planRecord.Id == default)
             {
@@ -57,9 +65,17 @@ namespace CarCareTracker.Controllers
             {
                 return Json(OperationResponse.Failed("Access Denied"));
             }
+            if (planRecord.Id != default)
+            {
+                var existingRecord = _planRecordTemplateDataAccess.GetPlanRecordTemplateById(planRecord.Id);
+                if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.Edit))
+                {
+                    return Json(OperationResponse.Failed("Access Denied"));
+                }
+            }
             //check if template name already taken.
-            var existingRecord = _planRecordTemplateDataAccess.GetPlanRecordTemplatesByVehicleId(planRecord.VehicleId).Where(x => x.Description == planRecord.Description).Any();
-            if (planRecord.Id == default && existingRecord)
+            var existingRecordWithSameName = _planRecordTemplateDataAccess.GetPlanRecordTemplatesByVehicleId(planRecord.VehicleId).Any(x => x.Description.Trim() == planRecord.Description.Trim());
+            if (planRecord.Id == default && existingRecordWithSameName)
             {
                 return Json(OperationResponse.Failed("A template with that description already exists for this vehicle"));
             }
@@ -383,7 +399,7 @@ namespace CarCareTracker.Controllers
             //security check.
             if (!_userLogic.UserCanEditVehicle(GetUserID(), result.VehicleId, HouseholdPermission.View))
             {
-                return Redirect("/Error/Unauthorized");
+                return Forbid();
             }
             return PartialView("Plan/_PlanRecordTemplateEditModal", result);
         }
@@ -394,7 +410,7 @@ namespace CarCareTracker.Controllers
             //security check.
             if (!_userLogic.UserCanEditVehicle(GetUserID(), result.VehicleId, HouseholdPermission.View))
             {
-                return Redirect("/Error/Unauthorized");
+                return Forbid();
             }
             //convert to Input object.
             var convertedResult = new PlanRecordInput

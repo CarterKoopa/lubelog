@@ -16,7 +16,7 @@ namespace CarCareTracker.Controllers
             var userConfig = _config.GetUserConfig(User);
             bool useMPG = userConfig.UseMPG;
             var vehicleData = _dataAccess.GetVehicleById(vehicleId);
-            bool useUKMPG = !vehicleData.IsElectric && userConfig.UseUKMPG; //do not apply UK conversion on electric vehicles.
+            bool useUKMPG = userConfig.UseUKMPG;
             // FEATURE: Odometer Compensation - parse compensation factor and start mileage from vehicle settings
             decimal compensationFactor = 1.0m;
             bool hasOdometerCompensation = !string.IsNullOrWhiteSpace(vehicleData.OdometerCompensationFactor);
@@ -25,10 +25,10 @@ namespace CarCareTracker.Controllers
                 decimal.TryParse(vehicleData.OdometerCompensationFactor, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out compensationFactor);
             }
             int compensationStart = vehicleData.OdometerCompensationStart;
-            var computedResults = _gasHelper.GetGasRecordViewModels(result, useMPG, useUKMPG, compensationFactor, compensationStart);
+            var computedResults = _gasHelper.GetGasRecordViewModels(result, useMPG, useUKMPG, vehicleData.IsElectric, compensationFactor, compensationStart);
             if (userConfig.UseDescending)
             {
-                computedResults = computedResults.OrderByDescending(x => DateTime.Parse(x.Date)).ThenByDescending(x => x.Mileage).ToList();
+                computedResults = computedResults.OrderByDescending(x => DateTime.Parse(x.Date)).ThenByDescending(x => x.Mileage).ThenByDescending(x=>x.EndingSoc).ToList();
             }
             var vehicleIsElectric = vehicleData.IsElectric;
             var vehicleUseHours = vehicleData.UseHours;
@@ -51,6 +51,14 @@ namespace CarCareTracker.Controllers
             if (!_userLogic.UserCanEditVehicle(GetUserID(), gasRecord.VehicleId, HouseholdPermission.Edit))
             {
                 return Json(OperationResponse.Failed("Access Denied"));
+            }
+            if (gasRecord.Id != default)
+            {
+                var existingRecord = _gasRecordDataAccess.GetGasRecordById(gasRecord.Id);
+                if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.Edit))
+                {
+                    return Json(OperationResponse.Failed("Access Denied"));
+                }
             }
             gasRecord.Files = gasRecord.Files.Select(x => { return new UploadedFiles { Name = x.Name, Location = _fileHelper.MoveFileFromTemp(x.Location, "documents/") }; }).ToList();
             if (gasRecord.Supplies.Any())
@@ -108,7 +116,7 @@ namespace CarCareTracker.Controllers
             //security check.
             if (!_userLogic.UserCanEditVehicle(GetUserID(), result.VehicleId, HouseholdPermission.View))
             {
-                return Redirect("/Error/Unauthorized");
+                return Forbid();
             }
             var convertedResult = new GasRecordInput
             {
@@ -121,6 +129,8 @@ namespace CarCareTracker.Controllers
                 Gallons = result.Gallons,
                 IsFillToFull = result.IsFillToFull,
                 MissedFuelUp = result.MissedFuelUp,
+                StartingSoc = result.StartingSoc,
+                EndingSoc = result.EndingSoc,
                 Notes = result.Notes,
                 Tags = result.Tags,
                 RequisitionHistory = result.RequisitionHistory,

@@ -27,6 +27,14 @@ namespace CarCareTracker.Controllers
             {
                 return Json(OperationResponse.Failed("Access Denied"));
             }
+            if (equipmentRecord.Id != default)
+            {
+                var existingRecord = _equipmentRecordDataAccess.GetEquipmentRecordById(equipmentRecord.Id);
+                if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.Edit))
+                {
+                    return Json(OperationResponse.Failed("Access Denied"));
+                }
+            }
             //move files from temp.
             equipmentRecord.Files = equipmentRecord.Files.Select(x => { return new UploadedFiles { Name = x.Name, Location = _fileHelper.MoveFileFromTemp(x.Location, "documents/") }; }).ToList();
             var convertedRecord = equipmentRecord.ToEquipmentRecord();
@@ -49,7 +57,7 @@ namespace CarCareTracker.Controllers
             //security check.
             if (!_userLogic.UserCanEditVehicle(GetUserID(), result.VehicleId, HouseholdPermission.View))
             {
-                return Redirect("/Error/Unauthorized");
+                return Forbid();
             }
             var odometerRecords = _odometerRecordDataAccess.GetOdometerRecordsByVehicleId(result.VehicleId);
             var linkedOdometerRecords = odometerRecords.Where(x => x.EquipmentRecordId.Contains(equipmentRecordId));

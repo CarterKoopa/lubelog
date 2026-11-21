@@ -17,7 +17,7 @@ namespace CarCareTracker.Controllers
             return PartialView("_BulkDataImporter", mode);
         }
         [HttpGet]
-        public IActionResult GenerateCsvSample(ImportMode mode)
+        public async Task<IActionResult> GenerateCsvSample(ImportMode mode, int vehicleId)
         {
             string uploadDirectory = "temp/";
             string uploadPath = Path.Combine(_webEnv.ContentRootPath, "data", uploadDirectory);
@@ -53,6 +53,12 @@ namespace CarCareTracker.Controllers
                     break;
                 case ImportMode.GasRecord:
                     {
+                        bool writeElectric = false;
+                        if (vehicleId != default)
+                        {
+                            var vehicleData = _dataAccess.GetVehicleById(vehicleId);
+                            writeElectric = vehicleData.IsElectric;
+                        }
                         var exportData = new List<GasRecordExportModel> { new GasRecordExportModel
                         {
                             Date = DateTime.Now.ToShortDateString(),
@@ -61,6 +67,8 @@ namespace CarCareTracker.Controllers
                             Cost = 45.67M.ToString("C"),
                             IsFillToFull = true.ToString(),
                             MissedFuelUp = false.ToString(),
+                            StartingSoc = "20",
+                            EndingSoc = "80",
                             // FEATURE: Flex Fuel - show the fuel type column in the sample import template
                             FuelType = "Gasoline",
                             Notes = "Test Note",
@@ -71,7 +79,7 @@ namespace CarCareTracker.Controllers
                             using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
                             {
                                 //custom writer
-                                StaticHelper.WriteGasRecordExportModel(csv, exportData);
+                                StaticHelper.WriteGasRecordExportModel(csv, exportData, writeElectric);
                             }
                             writer.Dispose();
                         }
@@ -192,7 +200,7 @@ namespace CarCareTracker.Controllers
             }
             try
             {
-                var fileBytes = _fileHelper.GetFileBytes(fullExportFilePath, true);
+                var fileBytes = await _fileHelper.GetFileBytesAsync(fullExportFilePath, true);
                 if (fileBytes.Length > 0)
                 {
                     return File(fileBytes, "text/csv", $"{mode.ToString().ToLower()}sample.csv");
@@ -616,7 +624,7 @@ namespace CarCareTracker.Controllers
                 {
                     decimal.TryParse(vehicleData.OdometerCompensationFactor, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out exportCompFactor);
                 }
-                var convertedRecords = _gasHelper.GetGasRecordViewModels(vehicleRecords, useMPG, useUKMPG, exportCompFactor, vehicleData.OdometerCompensationStart);
+                var convertedRecords = _gasHelper.GetGasRecordViewModels(vehicleRecords, useMPG, useUKMPG, vehicleData.IsElectric, exportCompFactor, vehicleData.OdometerCompensationStart);
                 //filter by tags
                 if (exportParameters.Tags.Any())
                 {
@@ -652,6 +660,8 @@ namespace CarCareTracker.Controllers
                         Odometer = x.Mileage.ToString(),
                         IsFillToFull = x.IsFillToFull.ToString(),
                         MissedFuelUp = x.MissedFuelUp.ToString(),
+                        StartingSoc = x.StartingSoc.ToString(),
+                        EndingSoc = x.EndingSoc.ToString(),
                         // FEATURE: Flex Fuel - include fuel type in gas record exports
                         FuelType = x.FuelType,
                         Notes = x.Notes,
@@ -662,7 +672,7 @@ namespace CarCareTracker.Controllers
                     {
                         using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
                         {
-                            StaticHelper.WriteGasRecordExportModel(csv, exportData);
+                            StaticHelper.WriteGasRecordExportModel(csv, exportData, vehicleData.IsElectric);
                         }
                     }
                     return Json($"/{fileNameToExport}");
@@ -786,6 +796,14 @@ namespace CarCareTracker.Controllers
                                         var possibleMissedFuelUpValues = new List<string> { "1", "true" };
                                         var parsedBool = possibleMissedFuelUpValues.Contains(importModel.MissedFuelUp.Trim().ToLower());
                                         convertedRecord.MissedFuelUp = parsedBool;
+                                    }
+                                    if (!string.IsNullOrWhiteSpace(importModel.StartingSoc))
+                                    {
+                                        convertedRecord.StartingSoc = int.Parse(importModel.StartingSoc);
+                                    }
+                                    if (!string.IsNullOrWhiteSpace(importModel.EndingSoc))
+                                    {
+                                        convertedRecord.EndingSoc = int.Parse(importModel.EndingSoc);
                                     }
                                     // FEATURE: Flex Fuel - parse the fuel type column if present ("E85"/"E-85" case-insensitive; anything else is Gasoline)
                                     if (!string.IsNullOrWhiteSpace(importModel.FuelType))

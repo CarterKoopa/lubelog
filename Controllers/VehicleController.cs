@@ -168,22 +168,7 @@ namespace CarCareTracker.Controllers
         public IActionResult DeleteVehicle(int vehicleId)
         {
             //Delete all service records, gas records, notes, etc.
-            var result = _gasRecordDataAccess.DeleteAllGasRecordsByVehicleId(vehicleId) &&
-                _serviceRecordDataAccess.DeleteAllServiceRecordsByVehicleId(vehicleId) &&
-                _collisionRecordDataAccess.DeleteAllCollisionRecordsByVehicleId(vehicleId) &&
-                _taxRecordDataAccess.DeleteAllTaxRecordsByVehicleId(vehicleId) &&
-                _noteDataAccess.DeleteAllNotesByVehicleId(vehicleId) &&
-                _reminderRecordDataAccess.DeleteAllReminderRecordsByVehicleId(vehicleId) &&
-                _upgradeRecordDataAccess.DeleteAllUpgradeRecordsByVehicleId(vehicleId) &&
-                _planRecordDataAccess.DeleteAllPlanRecordsByVehicleId(vehicleId) &&
-                _planRecordTemplateDataAccess.DeleteAllPlanRecordTemplatesByVehicleId(vehicleId) &&
-                _inspectionRecordDataAccess.DeleteAllInspectionRecordsByVehicleId(vehicleId) &&
-                _inspectionRecordTemplateDataAccess.DeleteAllInspectionReportTemplatesByVehicleId(vehicleId) &&
-                _equipmentRecordDataAccess.DeleteAllEquipmentRecordsByVehicleId(vehicleId) &&
-                _supplyRecordDataAccess.DeleteAllSupplyRecordsByVehicleId(vehicleId) &&
-                _odometerRecordDataAccess.DeleteAllOdometerRecordsByVehicleId(vehicleId) &&
-                _userLogic.DeleteAllAccessToVehicle(vehicleId) &&
-                _dataAccess.DeleteVehicle(vehicleId);
+            var result = _userLogic.DeleteAllAccessToVehicle(vehicleId) && _vehicleLogic.DeleteVehicleRecords(vehicleId);
             if (result)
             {
                 _eventLogic.PublishEvent(GetUserID(), WebHookPayload.Generic($"Deleted Vehicle - Id: {vehicleId}", "vehicle.delete", User.Identity?.Name ?? string.Empty, vehicleId.ToString()));
@@ -198,22 +183,7 @@ namespace CarCareTracker.Controllers
             foreach (int vehicleId in vehicleIds)
             {
                 //Delete all service records, gas records, notes, etc.
-                var result = _gasRecordDataAccess.DeleteAllGasRecordsByVehicleId(vehicleId) &&
-                    _serviceRecordDataAccess.DeleteAllServiceRecordsByVehicleId(vehicleId) &&
-                    _collisionRecordDataAccess.DeleteAllCollisionRecordsByVehicleId(vehicleId) &&
-                    _taxRecordDataAccess.DeleteAllTaxRecordsByVehicleId(vehicleId) &&
-                    _noteDataAccess.DeleteAllNotesByVehicleId(vehicleId) &&
-                    _reminderRecordDataAccess.DeleteAllReminderRecordsByVehicleId(vehicleId) &&
-                    _upgradeRecordDataAccess.DeleteAllUpgradeRecordsByVehicleId(vehicleId) &&
-                    _planRecordDataAccess.DeleteAllPlanRecordsByVehicleId(vehicleId) &&
-                    _planRecordTemplateDataAccess.DeleteAllPlanRecordTemplatesByVehicleId(vehicleId) &&
-                    _inspectionRecordDataAccess.DeleteAllInspectionRecordsByVehicleId(vehicleId) &&
-                    _inspectionRecordTemplateDataAccess.DeleteAllInspectionReportTemplatesByVehicleId(vehicleId) &&
-                    _equipmentRecordDataAccess.DeleteAllEquipmentRecordsByVehicleId(vehicleId) &&
-                    _supplyRecordDataAccess.DeleteAllSupplyRecordsByVehicleId(vehicleId) &&
-                    _odometerRecordDataAccess.DeleteAllOdometerRecordsByVehicleId(vehicleId) &&
-                    _userLogic.DeleteAllAccessToVehicle(vehicleId) &&
-                    _dataAccess.DeleteVehicle(vehicleId);
+                var result = _userLogic.DeleteAllAccessToVehicle(vehicleId) && _vehicleLogic.DeleteVehicleRecords(vehicleId);
                 if (result)
                 {
                     _eventLogic.PublishEvent(GetUserID(), WebHookPayload.Generic($"Deleted Vehicle - Id: {vehicleId}", "vehicle.delete", User.Identity?.Name ?? string.Empty, vehicleId.ToString()));
@@ -482,7 +452,7 @@ namespace CarCareTracker.Controllers
         }
         [HttpPost]
         [TypeFilter(typeof(CollaboratorFilter))]
-        public IActionResult SearchRecordsByTags(int vehicleId, string tags)
+        public IActionResult SearchRecordsByTags(int vehicleId, string tags, string operation)
         {
             List<SearchResult> searchResults = new List<SearchResult>();
             if (string.IsNullOrWhiteSpace(tags))
@@ -490,6 +460,7 @@ namespace CarCareTracker.Controllers
                 return Json(searchResults);
             }
             var tagsFilter = tags.Split(' ').Distinct();
+            bool andOperator = operation.Trim().ToLower() == "and";
             foreach (ImportMode visibleTab in _config.GetUserConfig(User).VisibleTabs)
             {
                 switch (visibleTab)
@@ -497,77 +468,154 @@ namespace CarCareTracker.Controllers
                     case ImportMode.ServiceRecord:
                         {
                             var results = _serviceRecordDataAccess.GetServiceRecordsByVehicleId(vehicleId);
-                            results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            if (andOperator)
+                            {
+                                results.RemoveAll(x => !tagsFilter.All(y => x.Tags.Contains(y)));
+                            } 
+                            else
+                            {
+                                results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            }
                             searchResults.AddRange(results.Select(x => new SearchResult { Id = x.Id, RecordType = ImportMode.ServiceRecord, Description = $"{x.Date.ToShortDateString()} - {x.Description}" }));
                         }
                         break;
                     case ImportMode.RepairRecord:
                         {
                             var results = _collisionRecordDataAccess.GetCollisionRecordsByVehicleId(vehicleId);
-                            results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            if (andOperator)
+                            {
+                                results.RemoveAll(x => !tagsFilter.All(y => x.Tags.Contains(y)));
+                            }
+                            else
+                            {
+                                results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            }
                             searchResults.AddRange(results.Select(x => new SearchResult { Id = x.Id, RecordType = ImportMode.RepairRecord, Description = $"{x.Date.ToShortDateString()} - {x.Description}" }));
                         }
                         break;
                     case ImportMode.UpgradeRecord:
                         {
                             var results = _upgradeRecordDataAccess.GetUpgradeRecordsByVehicleId(vehicleId);
-                            results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            if (andOperator)
+                            {
+                                results.RemoveAll(x => !tagsFilter.All(y => x.Tags.Contains(y)));
+                            }
+                            else
+                            {
+                                results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            }
                             searchResults.AddRange(results.Select(x => new SearchResult { Id = x.Id, RecordType = ImportMode.UpgradeRecord, Description = $"{x.Date.ToShortDateString()} - {x.Description}" }));
                         }
                         break;
                     case ImportMode.TaxRecord:
                         {
                             var results = _taxRecordDataAccess.GetTaxRecordsByVehicleId(vehicleId);
-                            results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            if (andOperator)
+                            {
+                                results.RemoveAll(x => !tagsFilter.All(y => x.Tags.Contains(y)));
+                            }
+                            else
+                            {
+                                results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            }
                             searchResults.AddRange(results.Select(x => new SearchResult { Id = x.Id, RecordType = ImportMode.TaxRecord, Description = $"{x.Date.ToShortDateString()} - {x.Description}" }));
                         }
                         break;
                     case ImportMode.SupplyRecord:
                         {
                             var results = _supplyRecordDataAccess.GetSupplyRecordsByVehicleId(vehicleId);
-                            results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            if (andOperator)
+                            {
+                                results.RemoveAll(x => !tagsFilter.All(y => x.Tags.Contains(y)));
+                            }
+                            else
+                            {
+                                results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            }
                             searchResults.AddRange(results.Select(x => new SearchResult { Id = x.Id, RecordType = ImportMode.SupplyRecord, Description = $"{x.Date.ToShortDateString()} - {x.Description}" }));
                         }
                         break;
                     case ImportMode.OdometerRecord:
                         {
                             var results = _odometerRecordDataAccess.GetOdometerRecordsByVehicleId(vehicleId);
-                            results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            if (andOperator)
+                            {
+                                results.RemoveAll(x => !tagsFilter.All(y => x.Tags.Contains(y)));
+                            }
+                            else
+                            {
+                                results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            }
                             searchResults.AddRange(results.Select(x => new SearchResult { Id = x.Id, RecordType = ImportMode.OdometerRecord, Description = $"{x.Date.ToShortDateString()} - {x.Mileage}" }));
                         }
                         break;
                     case ImportMode.GasRecord:
                         {
                             var results = _gasRecordDataAccess.GetGasRecordsByVehicleId(vehicleId);
-                            results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            if (andOperator)
+                            {
+                                results.RemoveAll(x => !tagsFilter.All(y => x.Tags.Contains(y)));
+                            }
+                            else
+                            {
+                                results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            }
                             searchResults.AddRange(results.Select(x => new SearchResult { Id = x.Id, RecordType = ImportMode.GasRecord, Description = $"{x.Date.ToShortDateString()} - {x.Mileage}" }));
                         }
                         break;
                     case ImportMode.NoteRecord:
                         {
                             var results = _noteDataAccess.GetNotesByVehicleId(vehicleId);
-                            results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            if (andOperator)
+                            {
+                                results.RemoveAll(x => !tagsFilter.All(y => x.Tags.Contains(y)));
+                            }
+                            else
+                            {
+                                results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            }
                             searchResults.AddRange(results.Select(x => new SearchResult { Id = x.Id, RecordType = ImportMode.NoteRecord, Description = $"{x.Description}" }));
                         }
                         break;
                     case ImportMode.ReminderRecord:
                         {
                             var results = _reminderRecordDataAccess.GetReminderRecordsByVehicleId(vehicleId);
-                            results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            if (andOperator)
+                            {
+                                results.RemoveAll(x => !tagsFilter.All(y => x.Tags.Contains(y)));
+                            }
+                            else
+                            {
+                                results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            }
                             searchResults.AddRange(results.Select(x => new SearchResult { Id = x.Id, RecordType = ImportMode.ReminderRecord, Description = $"{x.Description}" }));
                         }
                         break;
                     case ImportMode.InspectionRecord:
                         {
                             var results = _inspectionRecordDataAccess.GetInspectionRecordsByVehicleId(vehicleId);
-                            results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            if (andOperator)
+                            {
+                                results.RemoveAll(x => !tagsFilter.All(y => x.Tags.Contains(y)));
+                            }
+                            else
+                            {
+                                results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            }
                             searchResults.AddRange(results.Select(x => new SearchResult { Id = x.Id, RecordType = ImportMode.InspectionRecord, Description = $"{x.Date.ToShortDateString()} - {x.Description}" }));
                         }
                         break;
                     case ImportMode.EquipmentRecord:
                         {
                             var results = _equipmentRecordDataAccess.GetEquipmentRecordsByVehicleId(vehicleId);
-                            results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            if (andOperator)
+                            {
+                                results.RemoveAll(x => !tagsFilter.All(y => x.Tags.Contains(y)));
+                            }
+                            else
+                            {
+                                results.RemoveAll(x => !x.Tags.Any(y => tagsFilter.Contains(y)));
+                            }
                             searchResults.AddRange(results.Select(x => new SearchResult { Id = x.Id, RecordType = ImportMode.EquipmentRecord, Description = $"{x.Description}" }));
                         }
                         break;
@@ -829,6 +877,11 @@ namespace CarCareTracker.Controllers
                     case ImportMode.ServiceRecord:
                         {
                             var existingRecord = _serviceRecordDataAccess.GetServiceRecordById(recordId);
+                            //security check
+                            if (existingRecord.VehicleId != vehicleData.Id)
+                            {
+                                continue;
+                            }
                             existingRecord.Mileage += int.Parse(vehicleData.OdometerDifference);
                             existingRecord.Mileage = decimal.ToInt32(existingRecord.Mileage * decimal.Parse(vehicleData.OdometerMultiplier, NumberStyles.Any));
                             result = _serviceRecordDataAccess.SaveServiceRecordToVehicle(existingRecord);
@@ -837,6 +890,11 @@ namespace CarCareTracker.Controllers
                     case ImportMode.RepairRecord:
                         {
                             var existingRecord = _collisionRecordDataAccess.GetCollisionRecordById(recordId);
+                            //security check
+                            if (existingRecord.VehicleId != vehicleData.Id)
+                            {
+                                continue;
+                            }
                             existingRecord.Mileage += int.Parse(vehicleData.OdometerDifference);
                             existingRecord.Mileage = decimal.ToInt32(existingRecord.Mileage * decimal.Parse(vehicleData.OdometerMultiplier, NumberStyles.Any));
                             result = _collisionRecordDataAccess.SaveCollisionRecordToVehicle(existingRecord);
@@ -845,6 +903,11 @@ namespace CarCareTracker.Controllers
                     case ImportMode.UpgradeRecord:
                         {
                             var existingRecord = _upgradeRecordDataAccess.GetUpgradeRecordById(recordId);
+                            //security check
+                            if (existingRecord.VehicleId != vehicleData.Id)
+                            {
+                                continue;
+                            }
                             existingRecord.Mileage += int.Parse(vehicleData.OdometerDifference);
                             existingRecord.Mileage = decimal.ToInt32(existingRecord.Mileage * decimal.Parse(vehicleData.OdometerMultiplier, NumberStyles.Any));
                             result = _upgradeRecordDataAccess.SaveUpgradeRecordToVehicle(existingRecord);
@@ -853,6 +916,11 @@ namespace CarCareTracker.Controllers
                     case ImportMode.GasRecord:
                         {
                             var existingRecord = _gasRecordDataAccess.GetGasRecordById(recordId);
+                            //security check
+                            if (existingRecord.VehicleId != vehicleData.Id)
+                            {
+                                continue;
+                            }
                             existingRecord.Mileage += int.Parse(vehicleData.OdometerDifference);
                             existingRecord.Mileage = decimal.ToInt32(existingRecord.Mileage * decimal.Parse(vehicleData.OdometerMultiplier, NumberStyles.Any));
                             result = _gasRecordDataAccess.SaveGasRecordToVehicle(existingRecord);
@@ -861,6 +929,11 @@ namespace CarCareTracker.Controllers
                     case ImportMode.OdometerRecord:
                         {
                             var existingRecord = _odometerRecordDataAccess.GetOdometerRecordById(recordId);
+                            //security check
+                            if (existingRecord.VehicleId != vehicleData.Id)
+                            {
+                                continue;
+                            }
                             existingRecord.Mileage += int.Parse(vehicleData.OdometerDifference);
                             existingRecord.Mileage = decimal.ToInt32(existingRecord.Mileage * decimal.Parse(vehicleData.OdometerMultiplier, NumberStyles.Any));
                             result = _odometerRecordDataAccess.SaveOdometerRecordToVehicle(existingRecord);
@@ -1058,10 +1131,14 @@ namespace CarCareTracker.Controllers
                     case ImportMode.ServiceRecord:
                         {
                             var existingRecord = _serviceRecordDataAccess.GetServiceRecordById(recordId);
-                            existingRecord.Id = default;
-                            existingRecord.RequisitionHistory = new List<SupplyUsageHistory>();
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
                             foreach (int vehicleId in vehicleIds)
                             {
+                                existingRecord.Id = default;
+                                existingRecord.RequisitionHistory = new List<SupplyUsageHistory>();
                                 existingRecord.VehicleId = vehicleId;
                                 result = _serviceRecordDataAccess.SaveServiceRecordToVehicle(existingRecord);
                             }
@@ -1070,10 +1147,14 @@ namespace CarCareTracker.Controllers
                     case ImportMode.RepairRecord:
                         {
                             var existingRecord = _collisionRecordDataAccess.GetCollisionRecordById(recordId);
-                            existingRecord.Id = default;
-                            existingRecord.RequisitionHistory = new List<SupplyUsageHistory>();
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
                             foreach (int vehicleId in vehicleIds)
                             {
+                                existingRecord.Id = default;
+                                existingRecord.RequisitionHistory = new List<SupplyUsageHistory>();
                                 existingRecord.VehicleId = vehicleId;
                                 result = _collisionRecordDataAccess.SaveCollisionRecordToVehicle(existingRecord);
                             }
@@ -1082,10 +1163,14 @@ namespace CarCareTracker.Controllers
                     case ImportMode.UpgradeRecord:
                         {
                             var existingRecord = _upgradeRecordDataAccess.GetUpgradeRecordById(recordId);
-                            existingRecord.Id = default;
-                            existingRecord.RequisitionHistory = new List<SupplyUsageHistory>();
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
                             foreach (int vehicleId in vehicleIds)
                             {
+                                existingRecord.Id = default;
+                                existingRecord.RequisitionHistory = new List<SupplyUsageHistory>();
                                 existingRecord.VehicleId = vehicleId;
                                 result = _upgradeRecordDataAccess.SaveUpgradeRecordToVehicle(existingRecord);
                             }
@@ -1094,9 +1179,14 @@ namespace CarCareTracker.Controllers
                     case ImportMode.GasRecord:
                         {
                             var existingRecord = _gasRecordDataAccess.GetGasRecordById(recordId);
-                            existingRecord.Id = default;
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
                             foreach (int vehicleId in vehicleIds)
                             {
+                                existingRecord.Id = default;
+                                existingRecord.RequisitionHistory = new List<SupplyUsageHistory>();
                                 existingRecord.VehicleId = vehicleId;
                                 result = _gasRecordDataAccess.SaveGasRecordToVehicle(existingRecord);
                             }
@@ -1105,9 +1195,13 @@ namespace CarCareTracker.Controllers
                     case ImportMode.TaxRecord:
                         {
                             var existingRecord = _taxRecordDataAccess.GetTaxRecordById(recordId);
-                            existingRecord.Id = default;
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
                             foreach (int vehicleId in vehicleIds)
                             {
+                                existingRecord.Id = default;
                                 existingRecord.VehicleId = vehicleId;
                                 result = _taxRecordDataAccess.SaveTaxRecordToVehicle(existingRecord);
                             }
@@ -1116,9 +1210,21 @@ namespace CarCareTracker.Controllers
                     case ImportMode.SupplyRecord:
                         {
                             var existingRecord = _supplyRecordDataAccess.GetSupplyRecordById(recordId);
-                            existingRecord.Id = default;
+                            if (existingRecord.VehicleId != default) //only check vehicle access if not duplicating from shop supplies
+                            {
+                                if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.View))
+                                {
+                                    continue;
+                                }
+                            } 
+                            else if (!_config.GetServerEnableShopSupplies()) //if duplicating from shop supply but shop supply not enabled
+                            {
+                                continue;
+                            }
                             foreach (int vehicleId in vehicleIds)
                             {
+                                existingRecord.Id = default;
+                                existingRecord.RequisitionHistory = new List<SupplyUsageHistory>();
                                 existingRecord.VehicleId = vehicleId;
                                 result = _supplyRecordDataAccess.SaveSupplyRecordToVehicle(existingRecord);
                             }
@@ -1127,9 +1233,13 @@ namespace CarCareTracker.Controllers
                     case ImportMode.NoteRecord:
                         {
                             var existingRecord = _noteDataAccess.GetNoteById(recordId);
-                            existingRecord.Id = default;
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
                             foreach (int vehicleId in vehicleIds)
                             {
+                                existingRecord.Id = default;
                                 existingRecord.VehicleId = vehicleId;
                                 result = _noteDataAccess.SaveNoteToVehicle(existingRecord);
                             }
@@ -1138,10 +1248,14 @@ namespace CarCareTracker.Controllers
                     case ImportMode.OdometerRecord:
                         {
                             var existingRecord = _odometerRecordDataAccess.GetOdometerRecordById(recordId);
-                            existingRecord.Id = default;
-                            existingRecord.EquipmentRecordId = new List<int>();
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
                             foreach (int vehicleId in vehicleIds)
                             {
+                                existingRecord.Id = default;
+                                existingRecord.EquipmentRecordId = new List<int>();
                                 existingRecord.VehicleId = vehicleId;
                                 result = _odometerRecordDataAccess.SaveOdometerRecordToVehicle(existingRecord);
                             }
@@ -1150,9 +1264,13 @@ namespace CarCareTracker.Controllers
                     case ImportMode.ReminderRecord:
                         {
                             var existingRecord = _reminderRecordDataAccess.GetReminderRecordById(recordId);
-                            existingRecord.Id = default;
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
                             foreach (int vehicleId in vehicleIds)
                             {
+                                existingRecord.Id = default;
                                 existingRecord.VehicleId = vehicleId;
                                 result = _reminderRecordDataAccess.SaveReminderRecordToVehicle(existingRecord);
                             }
@@ -1161,12 +1279,16 @@ namespace CarCareTracker.Controllers
                     case ImportMode.PlanRecord:
                         {
                             var existingRecord = _planRecordDataAccess.GetPlanRecordById(recordId);
-                            existingRecord.Id = default;
-                            existingRecord.ReminderRecordId = default;
-                            existingRecord.ReminderRecordIds = new List<int>();
-                            existingRecord.RequisitionHistory = new List<SupplyUsageHistory>();
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
                             foreach (int vehicleId in vehicleIds)
                             {
+                                existingRecord.Id = default;
+                                existingRecord.ReminderRecordId = default;
+                                existingRecord.ReminderRecordIds = new List<int>();
+                                existingRecord.RequisitionHistory = new List<SupplyUsageHistory>();
                                 existingRecord.VehicleId = vehicleId;
                                 result = _planRecordDataAccess.SavePlanRecordToVehicle(existingRecord);
                             }
@@ -1175,10 +1297,14 @@ namespace CarCareTracker.Controllers
                     case ImportMode.InspectionRecord:
                         {
                             var existingRecord = _inspectionRecordTemplateDataAccess.GetInspectionRecordTemplateById(recordId);
-                            existingRecord.Id = default;
-                            existingRecord.ReminderRecordId = new List<int>();
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
                             foreach (int vehicleId in vehicleIds)
                             {
+                                existingRecord.Id = default;
+                                existingRecord.ReminderRecordId = new List<int>();
                                 existingRecord.VehicleId = vehicleId;
                                 result = _inspectionRecordTemplateDataAccess.SaveInspectionReportTemplateToVehicle(existingRecord);
                             }
@@ -1187,9 +1313,13 @@ namespace CarCareTracker.Controllers
                     case ImportMode.EquipmentRecord:
                         {
                             var existingRecord = _equipmentRecordDataAccess.GetEquipmentRecordById(recordId);
-                            existingRecord.Id = default;
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
                             foreach (int vehicleId in vehicleIds)
                             {
+                                existingRecord.Id = default;
                                 existingRecord.VehicleId = vehicleId;
                                 result = _equipmentRecordDataAccess.SaveEquipmentRecordToVehicle(existingRecord);
                             }
@@ -1504,7 +1634,12 @@ namespace CarCareTracker.Controllers
                     {
                         foreach (int recordId in recordIds)
                         {
-                            stickerViewModel.GenericRecords.Add(_serviceRecordDataAccess.GetServiceRecordById(recordId));
+                            var record = _serviceRecordDataAccess.GetServiceRecordById(recordId);
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), record.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
+                            stickerViewModel.GenericRecords.Add(record);
                             recordsAdded++;
                         }
                     }
@@ -1513,7 +1648,12 @@ namespace CarCareTracker.Controllers
                     {
                         foreach (int recordId in recordIds)
                         {
-                            stickerViewModel.GenericRecords.Add(_collisionRecordDataAccess.GetCollisionRecordById(recordId));
+                            var record = _collisionRecordDataAccess.GetCollisionRecordById(recordId);
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), record.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
+                            stickerViewModel.GenericRecords.Add(record);
                             recordsAdded++;
                         }
                     }
@@ -1522,7 +1662,12 @@ namespace CarCareTracker.Controllers
                     {
                         foreach (int recordId in recordIds)
                         {
-                            stickerViewModel.GenericRecords.Add(_upgradeRecordDataAccess.GetUpgradeRecordById(recordId));
+                            var record = _upgradeRecordDataAccess.GetUpgradeRecordById(recordId);
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), record.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
+                            stickerViewModel.GenericRecords.Add(record);
                             recordsAdded++;
                         }
                     }
@@ -1532,6 +1677,10 @@ namespace CarCareTracker.Controllers
                         foreach (int recordId in recordIds)
                         {
                             var record = _gasRecordDataAccess.GetGasRecordById(recordId);
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), record.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
                             stickerViewModel.GenericRecords.Add(new GenericRecord
                             {
                                 Cost = record.Cost,
@@ -1550,6 +1699,10 @@ namespace CarCareTracker.Controllers
                         foreach (int recordId in recordIds)
                         {
                             var record = _taxRecordDataAccess.GetTaxRecordById(recordId);
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), record.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
                             stickerViewModel.GenericRecords.Add(new GenericRecord
                             {
                                 Description = record.Description,
@@ -1567,6 +1720,17 @@ namespace CarCareTracker.Controllers
                         foreach (int recordId in recordIds)
                         {
                             var record = _supplyRecordDataAccess.GetSupplyRecordById(recordId);
+                            if (record.VehicleId != default)
+                            {
+                                if (!_userLogic.UserCanEditVehicle(GetUserID(), record.VehicleId, HouseholdPermission.View))
+                                {
+                                    continue;
+                                }
+                            }
+                            else if (!_config.GetServerEnableShopSupplies()) //if printing shop supply but shop supply not enabled
+                            {
+                                continue;
+                            }
                             stickerViewModel.SupplyRecords.Add(record);
                             recordsAdded++;
                         }
@@ -1577,6 +1741,10 @@ namespace CarCareTracker.Controllers
                         foreach (int recordId in recordIds)
                         {
                             var record = _noteDataAccess.GetNoteById(recordId);
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), record.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
                             stickerViewModel.GenericRecords.Add(new GenericRecord
                             {
                                 Description = record.Description,
@@ -1591,6 +1759,10 @@ namespace CarCareTracker.Controllers
                         foreach (int recordId in recordIds)
                         {
                             var record = _odometerRecordDataAccess.GetOdometerRecordById(recordId);
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), record.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
                             stickerViewModel.GenericRecords.Add(new GenericRecord
                             {
                                 Date = record.Date,
@@ -1606,7 +1778,12 @@ namespace CarCareTracker.Controllers
                     {
                         foreach (int recordId in recordIds)
                         {
-                            stickerViewModel.ReminderRecords.Add(_reminderRecordDataAccess.GetReminderRecordById(recordId));
+                            var record = _reminderRecordDataAccess.GetReminderRecordById(recordId);
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), record.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
+                            stickerViewModel.ReminderRecords.Add(record);
                             recordsAdded++;
                         }
                     }
@@ -1616,6 +1793,10 @@ namespace CarCareTracker.Controllers
                         foreach (int recordId in recordIds)
                         {
                             var record = _planRecordDataAccess.GetPlanRecordById(recordId);
+                            if (!_userLogic.UserCanEditVehicle(GetUserID(), record.VehicleId, HouseholdPermission.View))
+                            {
+                                continue;
+                            }
                             stickerViewModel.GenericRecords.Add(new GenericRecord
                             {
                                 Description = record.Description,
@@ -1633,6 +1814,10 @@ namespace CarCareTracker.Controllers
                     foreach (int recordId in recordIds)
                     {
                         var record = _inspectionRecordDataAccess.GetInspectionRecordById(recordId);
+                        if (!_userLogic.UserCanEditVehicle(GetUserID(), record.VehicleId, HouseholdPermission.View))
+                        {
+                            continue;
+                        }
                         stickerViewModel.InspectionRecords.Add(record);
                         recordsAdded++;
                     }
@@ -1642,6 +1827,10 @@ namespace CarCareTracker.Controllers
                     foreach (int recordId in recordIds)
                     {
                         var record = _equipmentRecordDataAccess.GetEquipmentRecordById(recordId);
+                        if (!_userLogic.UserCanEditVehicle(GetUserID(), record.VehicleId, HouseholdPermission.View))
+                        {
+                            continue;
+                        }
                         stickerViewModel.EquipmentRecords.Add(_equipmentHelper.GetEquipmentRecordStickerViewModel(record, odometerRecords));
                         recordsAdded++;
                     }

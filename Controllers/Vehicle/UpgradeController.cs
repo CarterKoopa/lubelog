@@ -31,6 +31,14 @@ namespace CarCareTracker.Controllers
             {
                 return Json(OperationResponse.Failed("Access Denied"));
             }
+            if (upgradeRecord.Id != default)
+            {
+                var existingRecord = _upgradeRecordDataAccess.GetUpgradeRecordById(upgradeRecord.Id);
+                if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.Edit))
+                {
+                    return Json(OperationResponse.Failed("Access Denied"));
+                }
+            }
             //move files from temp.
             upgradeRecord.Files = upgradeRecord.Files.Select(x => { return new UploadedFiles { Name = x.Name, Location = _fileHelper.MoveFileFromTemp(x.Location, "documents/") }; }).ToList();
             if (upgradeRecord.Supplies.Any())
@@ -84,7 +92,7 @@ namespace CarCareTracker.Controllers
             //security check.
             if (!_userLogic.UserCanEditVehicle(GetUserID(), result.VehicleId, HouseholdPermission.View))
             {
-                return Redirect("/Error/Unauthorized");
+                return Forbid();
             }
             //convert to Input object.
             var convertedResult = new UpgradeRecordInput

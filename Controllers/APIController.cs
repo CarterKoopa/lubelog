@@ -41,6 +41,7 @@ namespace CarCareTracker.Controllers
         private readonly IWebHostEnvironment _webEnv;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IEventLogic _eventLogic;
+        private readonly IDBHealthCheck _dbHealthCheck;
         public APIController(IVehicleDataAccess dataAccess,
             IGasHelper gasHelper,
             IEquipmentHelper equipmentHelper,
@@ -67,7 +68,8 @@ namespace CarCareTracker.Controllers
             IOdometerLogic odometerLogic,
             IEventLogic eventLogic,
             IWebHostEnvironment webEnv,
-            IHttpClientFactory httpClientFactory)
+            IHttpClientFactory httpClientFactory,
+            IDBHealthCheck dbHealthCheck)
         {
             _dataAccess = dataAccess;
             _noteDataAccess = noteDataAccess;
@@ -96,25 +98,14 @@ namespace CarCareTracker.Controllers
             _config = config;
             _webEnv = webEnv;
             _httpClientFactory = httpClientFactory;
+            _dbHealthCheck = dbHealthCheck;
         }
-        public IActionResult Index()
+        public async Task<IActionResult> Index()
         {
             //load up documentation
             var apiDocFilePath = _fileHelper.GetFullFilePath("/defaults/api.json");
-            var apiDocText = _fileHelper.GetFileText(apiDocFilePath);
+            var apiDocText = await _fileHelper.GetFileTextAsync(apiDocFilePath);
             var apiDocData = JsonSerializer.Deserialize<List<APIDocumentation>>(apiDocText) ?? new List<APIDocumentation>();
-            var apiSerializeOptions = StaticHelper.GetNoEncodingOption();
-            apiSerializeOptions.WriteIndented = true;
-            foreach(APIDocumentation apiDocumentation in apiDocData)
-            {
-                foreach(APIMethod apiMethod in apiDocumentation.Methods)
-                {
-                    if (apiMethod.HasBody)
-                    {
-                        apiMethod.BodySampleString = JsonSerializer.Serialize(apiMethod.BodySample, apiSerializeOptions);
-                    }
-                }
-            }
             return View(apiDocData);
         }
         private int GetUserID()
@@ -142,17 +133,45 @@ namespace CarCareTracker.Controllers
             }
         }
         [HttpGet]
+        [Route("/health")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetServerHealth()
+        {
+            var viewModel = new ServerHealth
+            {
+                Version = StaticHelper.VersionNumber
+            };
+            DateTime startTime = DateTime.Now;
+            var databaseHealth = _dbHealthCheck.GetDatabaseHealth();
+            viewModel.Checks.Add(databaseHealth);
+            DateTime endTime = DateTime.Now;
+            var secondsElapsed = endTime - startTime;
+            viewModel.TotalDuration = secondsElapsed;
+            if (viewModel.Status == "fail")
+            {
+                Response.StatusCode = 500;
+            }
+            return Json(viewModel);
+        }
+        [HttpGet]
         [Route("/api/info")]
         public async Task<IActionResult> GetServerInformation()
         {
             var currentCulture = CultureInfo.CurrentCulture;
+            string allowedFileExtensions = _config.GetAllowedFileUploadExtensions();
+            List<string> allowedFileExtensionsArray = new List<string>();
+            if (!string.IsNullOrWhiteSpace(allowedFileExtensions) && allowedFileExtensions.Trim() != "*")
+            {
+                allowedFileExtensionsArray.AddRange(allowedFileExtensions.Split(",").Select(x => x.Trim()));
+            }
             var viewModel = new ServerInformation
             {
                 Locale = currentCulture.Name,
                 CurrentVersion = StaticHelper.VersionNumber,
                 CurrencySymbol = currentCulture.NumberFormat.CurrencySymbol,
                 DecimalSeparator = currentCulture.NumberFormat.NumberDecimalSeparator,
-                DateFormat = currentCulture.DateTimeFormat.ShortDatePattern
+                DateFormat = currentCulture.DateTimeFormat.ShortDatePattern,
+                AllowedAttachmentExtensions = allowedFileExtensionsArray
             };
             return Json(viewModel);
         }
@@ -216,7 +235,7 @@ namespace CarCareTracker.Controllers
                     vehicles.Add(_dataAccess.GetVehicleById(vehicleId));
                 } else
                 {
-                    return new RedirectResult("/Error/Unauthorized");
+                    return Forbid();
                 }
             } else
             {
@@ -253,10 +272,12 @@ namespace CarCareTracker.Controllers
                 return Json(convertedOdometer);
             }
         }
+        [TypeFilter(typeof(APIKeyFilter), Arguments = new object[] { HouseholdPermission.Edit })]
         [HttpPost]
         [Route("/api/vehicles/add")]
         [Consumes("application/json")]
         public IActionResult AddVehicleJson([FromBody] VehicleImportModel input) => AddVehicle(input);
+        [TypeFilter(typeof(APIKeyFilter), Arguments = new object[] { HouseholdPermission.Edit })]
         [HttpPost]
         [Route("/api/vehicles/add")]
         public IActionResult AddVehicle(VehicleImportModel input)
@@ -332,6 +353,29 @@ namespace CarCareTracker.Controllers
                 return Json(OperationResponse.Failed(ex.Message));
             }
         }
+        [TypeFilter(typeof(APIKeyFilter), Arguments = new object[] { HouseholdPermission.Delete })]
+        [HttpDelete]
+        [Route("/api/vehicles/delete")]
+        public IActionResult DeleteVehicle(int id)
+        {
+            var existingVehicle = _dataAccess.GetVehicleById(id);
+            if (existingVehicle == null || existingVehicle.Id == default)
+            {
+                Response.StatusCode = 400;
+                return Json(OperationResponse.Failed("Invalid Vehicle Id"));
+            }
+            if (!_userLogic.UserCanDirectlyEditVehicle(GetUserID(), id))
+            {
+                Response.StatusCode = 403;
+                return Json(OperationResponse.Failed("Access Denied, you don't have access to this vehicle."));
+            }
+            var result = _userLogic.DeleteAllAccessToVehicle(id) && _vehicleLogic.DeleteVehicleRecords(id);
+            if (result)
+            {
+                _eventLogic.PublishEvent(GetUserID(), WebHookPayload.Generic($"Deleted Vehicle - Id: {id} via API", "vehicle.delete.api", User.Identity?.Name ?? string.Empty, id.ToString()));
+            }
+            return Json(OperationResponse.Conditional(result, "Vehicle Deleted", StaticHelper.GenericErrorMessage));
+        }
         [TypeFilter(typeof(APIKeyFilter), Arguments = new object[] { HouseholdPermission.Edit })]
         [HttpPut]
         [Route("/api/vehicles/update")]
@@ -381,7 +425,7 @@ namespace CarCareTracker.Controllers
                 {
                     if (!_userLogic.UserCanEditVehicle(GetUserID(), existingVehicle.Id, HouseholdPermission.Edit))
                     {
-                        Response.StatusCode = 401;
+                        Response.StatusCode = 403;
                         return Json(OperationResponse.Failed("Access Denied, you don't have access to this vehicle."));
                     }
                     existingVehicle.Year = int.Parse(input.Year);
@@ -414,6 +458,7 @@ namespace CarCareTracker.Controllers
                 return Json(OperationResponse.Failed(ex.Message));
             }
         }
+        [TypeFilter(typeof(APIKeyFilter), Arguments = new object[] { HouseholdPermission.Edit })]
         [HttpPost]
         [Route("/api/documents/upload")]
         public IActionResult UploadDocument(List<IFormFile> documents)
@@ -425,8 +470,20 @@ namespace CarCareTracker.Controllers
                 string uploadPath = Path.Combine(_webEnv.ContentRootPath, "data", uploadDirectory);
                 if (!Directory.Exists(uploadPath))
                     Directory.CreateDirectory(uploadPath);
+                string allowedFileExtensions = _config.GetAllowedFileUploadExtensions();
+                List<string> allowedFileExtensionsArray = new List<string>();
+                if (!string.IsNullOrWhiteSpace(allowedFileExtensions) && allowedFileExtensions.Trim() != "*")
+                {
+                    allowedFileExtensionsArray.AddRange(allowedFileExtensions.Split(",").Select(x => x.Trim()));
+                }
                 foreach (IFormFile document in documents)
                 {
+                    //sanitize against list of allowed extensions
+                    if (allowedFileExtensionsArray.Any() && !allowedFileExtensions.Contains(Path.GetExtension(document.FileName)))
+                    {
+                        Response.StatusCode = 400;
+                        return Json(OperationResponse.Failed($"User tried to upload attachment with unapproved extension {Path.GetExtension(document.FileName)}"));
+                    }
                     string fileName = Guid.NewGuid() + Path.GetExtension(document.FileName);
                     string filePath = Path.Combine(uploadPath, fileName);
                     using (var stream = System.IO.File.Create(filePath))
@@ -604,7 +661,7 @@ namespace CarCareTracker.Controllers
             {
                 //download file
                 var fullExportFilePath = _fileHelper.GetFullFilePath(result, false);
-                var fileContents = _fileHelper.GetFileBytes(fullExportFilePath);
+                var fileContents = await _fileHelper.GetFileBytesAsync(fullExportFilePath);
                 return File(fileContents, "application/zip", Path.GetFileName(result));
             }
             else if (output.Trim().ToLower() == "email")
@@ -614,7 +671,7 @@ namespace CarCareTracker.Controllers
                 {
                     //download file
                     var fullExportFilePath = _fileHelper.GetFullFilePath(result, false);
-                    var fileContents = _fileHelper.GetFileBytes(fullExportFilePath);
+                    var fileContents = await _fileHelper.GetFileBytesAsync(fullExportFilePath);
                     var emailResponse = await _mailHelper.SendBackupEmail(Path.GetFileName(result), fileContents, defaultEmailAddress);
                     return Json(emailResponse);
                 } 

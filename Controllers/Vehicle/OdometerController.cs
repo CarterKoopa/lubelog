@@ -32,11 +32,11 @@ namespace CarCareTracker.Controllers
             bool _useDescending = _config.GetUserConfig(User).UseDescending;
             if (_useDescending)
             {
-                result = result.OrderByDescending(x => x.Date).ThenByDescending(x => x.Mileage).ToList();
+                result = result.OrderByDescending(x => x.Date).ThenByDescending(x => x.Mileage).ThenByDescending(x=>x.InitialMileage).ToList();
             }
             else
             {
-                result = result.OrderBy(x => x.Date).ThenBy(x => x.Mileage).ToList();
+                result = result.OrderBy(x => x.Date).ThenBy(x => x.Mileage).ThenBy(x=>x.InitialMileage).ToList();
             }
             return PartialView("Odometer/_OdometerRecords", result);
         }
@@ -47,6 +47,14 @@ namespace CarCareTracker.Controllers
             if (!_userLogic.UserCanEditVehicle(GetUserID(), odometerRecord.VehicleId, HouseholdPermission.Edit))
             {
                 return Json(OperationResponse.Failed("Access Denied"));
+            }
+            if (odometerRecord.Id != default)
+            {
+                var existingRecord = _odometerRecordDataAccess.GetOdometerRecordById(odometerRecord.Id);
+                if (!_userLogic.UserCanEditVehicle(GetUserID(), existingRecord.VehicleId, HouseholdPermission.Edit))
+                {
+                    return Json(OperationResponse.Failed("Access Denied"));
+                }
             }
             //move files from temp.
             odometerRecord.Files = odometerRecord.Files.Select(x => { return new UploadedFiles { Name = x.Name, Location = _fileHelper.MoveFileFromTemp(x.Location, "documents/") }; }).ToList();
@@ -162,7 +170,7 @@ namespace CarCareTracker.Controllers
             //security check.
             if (!_userLogic.UserCanEditVehicle(GetUserID(), result.VehicleId, HouseholdPermission.View))
             {
-                return Redirect("/Error/Unauthorized");
+                return Forbid();
             }
             //check for equipment
             var equipmentRecords = _equipmentRecordDataAccess.GetEquipmentRecordsByVehicleId(result.VehicleId).OrderByDescending(x => x.IsEquipped).ThenBy(x => x.Description).ToList();
@@ -219,7 +227,15 @@ namespace CarCareTracker.Controllers
             List<OdometerRecord> odometerRecords = new List<OdometerRecord>();
             foreach (int recordId in recordIds)
             {
-                odometerRecords.Add(_odometerRecordDataAccess.GetOdometerRecordById(recordId));
+                var existingOdometerRecord = _odometerRecordDataAccess.GetOdometerRecordById(recordId);
+                if (_userLogic.UserCanEditVehicle(GetUserID(), existingOdometerRecord.VehicleId, HouseholdPermission.View))
+                {
+                    odometerRecords.Add(existingOdometerRecord);
+                }
+            }
+            if (!odometerRecords.Any())
+            {
+                return Json(result); //nothing to add
             }
             int totalDistance = odometerRecords.Sum(x => x.DistanceTraveled);
             DateTime lastDate = odometerRecords.Max(x => x.Date);

@@ -134,18 +134,25 @@ namespace CarCareTracker.Controllers
         }
         public IActionResult ViewCalendarReminder(int reminderId)
         {
-            var reminder = _reminderRecordDataAccess.GetReminderRecordById(reminderId);
-            var reminderUrgency = _reminderHelper.GetReminderRecordViewModels(new List<ReminderRecord> { reminder }, 0, DateTime.Now).FirstOrDefault();
+            var existingReminder = _reminderRecordDataAccess.GetReminderRecordById(reminderId);
+            //security check
+            if (!_userLogic.UserCanEditVehicle(GetUserID(), existingReminder.VehicleId, HouseholdPermission.View))
+            {
+                return Json(OperationResponse.Failed("Access Denied"));
+            }
+            var reminderUrgency = _reminderHelper.GetReminderRecordViewModels(new List<ReminderRecord> { existingReminder }, 0, DateTime.Now).FirstOrDefault();
             return PartialView("_ReminderRecordCalendarModal", reminderUrgency);
         }
         public async Task<IActionResult> Settings()
         {
             var userConfig = _config.GetUserConfig(User);
             var languages = _fileHelper.GetLanguages();
+            var themes = _fileHelper.GetThemes();
             var viewModel = new SettingsViewModel
             {
                 UserConfig = userConfig,
-                UILanguages = languages
+                UILanguages = languages,
+                UIThemes = themes
             };
             return PartialView("_Settings", viewModel);
         }
@@ -534,7 +541,7 @@ namespace CarCareTracker.Controllers
                 return Json(OperationResponse.Failed());
             }
         }
-        public ActionResult GetVehicleSelector(int vehicleId)
+        public IActionResult GetVehicleSelector(int vehicleId, ImportMode importMode)
         {
             var vehiclesStored = _dataAccess.GetVehicles();
             if (!User.IsInRole(nameof(UserData.IsRootUser)))
@@ -550,9 +557,13 @@ namespace CarCareTracker.Controllers
             {
                 vehiclesStored.RemoveAll(x => !string.IsNullOrWhiteSpace(x.SoldDate));
             }
+            if (importMode == ImportMode.SupplyRecord && _config.GetServerEnableShopSupplies() && vehicleId != default)
+            {
+                vehiclesStored.Add(new Vehicle { Id = 0, Make = _translationHelper.Translate(_config.GetUserConfig(User).UserLanguage, "Shop Supplies") });
+            }
             return PartialView("_VehicleSelector", vehiclesStored);
         }
-        public ActionResult GetVehicleSelectorOdometer(int vehicleId)
+        public IActionResult GetVehicleSelectorOdometer(int vehicleId)
         {
             var vehiclesStored = _dataAccess.GetVehicles();
             if (!User.IsInRole(nameof(UserData.IsRootUser)))
